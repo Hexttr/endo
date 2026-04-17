@@ -81,8 +81,29 @@ function TreeViewInner() {
     return fromSession || searchParams.get('highlight') || null
   })
   const initDone = useRef(false)
+  const rafRef = useRef(null)
+  const [rfReady, setRfReady] = useState(false)
 
-  const { fitView, setCenter, setViewport } = useReactFlow()
+  const { fitView, setViewport, getNode } = useReactFlow()
+
+  // Focus zoom level used when centring on a specific node. One shared constant
+  // so every "focus" behaves identically and the result is predictable.
+  const FOCUS_ZOOM = 1.5
+
+  const focusOnNode = useCallback((nodeId) => {
+    if (!nodeId) return false
+    // Verify the node is actually in the flow; otherwise fitView silently does nothing.
+    const rfNode = getNode(nodeId)
+    if (!rfNode) return false
+    fitView({
+      nodes: [{ id: nodeId }],
+      duration: 650,
+      minZoom: FOCUS_ZOOM,
+      maxZoom: FOCUS_ZOOM,
+      padding: 0.4,
+    })
+    return true
+  }, [fitView, getNode])
 
   const loadEdges = () => fetchEdgesGraph().then(setAllEdges).catch(() => {})
 
@@ -96,36 +117,8 @@ function TreeViewInner() {
     fetchNodes(selectedSection || undefined).then(setNodes).catch(() => {})
   }, [selectedSection])
 
-  // One-time viewport initialization: center on highlight, restore saved viewport,
-  // or default fitView. Runs once when the graph has laid out its first nodes.
-  const runInit = useCallback((laidOutNodes) => {
-    if (initDone.current) return
-    if (!laidOutNodes || laidOutNodes.length === 0) return
-    initDone.current = true
-
-    if (highlightId) {
-      const target = laidOutNodes.find(n => n.id === highlightId)
-      if (target) {
-        const cx = target.position.x + NODE_W / 2
-        const cy = target.position.y + NODE_H / 2
-        setCenter(cx, cy, { zoom: 1.4, duration: 700 })
-        return
-      }
-    }
-
-    try {
-      const saved = sessionStorage.getItem(VIEWPORT_KEY)
-      if (saved) {
-        const vp = JSON.parse(saved)
-        if (vp && typeof vp.x === 'number' && typeof vp.y === 'number' && typeof vp.zoom === 'number') {
-          setViewport(vp, { duration: 0 })
-          return
-        }
-      }
-    } catch {}
-
-    fitView({ padding: 0.15, duration: 0 })
-  }, [highlightId, setCenter, setViewport, fitView])
+  // Fired by ReactFlow when its internal instance is ready to receive commands.
+  const onInit = useCallback(() => setRfReady(true), [])
 
   const onMoveEnd = useCallback((_, viewport) => {
     if (!initDone.current) return
@@ -304,17 +297,52 @@ function TreeViewInner() {
     return layoutGraph(raw, flowEdges)
   }, [filteredNodes, finals, flowEdges, showFinals, highlightId])
 
+  // One-time viewport initialization. We wait for:
+  //   1. The ReactFlow instance to be ready (onInit fired)
+  //   2. Nodes to be fetched
+  //   3. Edges OR finals to be fetched (so dagre runs on a stable graph and
+  //      flowNodes contains real laid-out positions, not the grid fallback)
+  //
+  // Then, inside a double-rAF, we either focus on the highlight target,
+  // restore the saved viewport, or run a default fitView. Double rAF is
+  // needed because ReactFlow measures node DOM sizes on its own render
+  // cycle — a single frame is not enough.
   useEffect(() => {
     if (initDone.current) return
+    if (!rfReady) return
     if (flowNodes.length === 0) return
-    // Wait for the async data to settle so dagre runs on a stable graph.
-    // Edges and finals are fetched independently from nodes — we want them
-    // all in before taking a snapshot for fitView/setCenter/setViewport.
-    const ready = nodes.length > 0 && (allEdges.length > 0 || finals.length > 0)
-    if (!ready) return
-    const timer = setTimeout(() => runInit(flowNodes), 180)
-    return () => clearTimeout(timer)
-  }, [flowNodes, runInit, nodes.length, allEdges.length, finals.length])
+    const dataReady = nodes.length > 0 && (allEdges.length > 0 || finals.length > 0)
+    if (!dataReady) return
+
+    initDone.current = true
+
+    const runInit = () => {
+      if (highlightId && focusOnNode(highlightId)) return
+
+      try {
+        const saved = sessionStorage.getItem(VIEWPORT_KEY)
+        if (saved) {
+          const vp = JSON.parse(saved)
+          if (vp && typeof vp.x === 'number' && typeof vp.y === 'number' && typeof vp.zoom === 'number') {
+            setViewport(vp, { duration: 0 })
+            return
+          }
+        }
+      } catch {}
+
+      fitView({ padding: 0.15, duration: 0 })
+    }
+
+    const raf1 = requestAnimationFrame(() => {
+      const raf2 = requestAnimationFrame(runInit)
+      // store for cleanup
+      rafRef.current = raf2
+    })
+    rafRef.current = raf1
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
+  }, [rfReady, flowNodes.length, nodes.length, allEdges.length, finals.length, highlightId, focusOnNode, fitView, setViewport])
 
   return (
     <div className="h-screen flex flex-col" onClick={() => setContextMenu(null)}>
@@ -391,6 +419,7 @@ function TreeViewInner() {
             edges={flowEdges}
             nodesConnectable={true}
             nodesDraggable={true}
+            onInit={onInit}
             onNodeDoubleClick={onNodeDoubleClick}
             onConnect={onConnect}
             onEdgeContextMenu={onEdgeContextMenu}
