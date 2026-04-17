@@ -91,38 +91,43 @@ function TreeViewInner() {
   const [edgesFetched, setEdgesFetched] = useState(false)
   const [finalsFetched, setFinalsFetched] = useState(false)
 
-  const { setViewport, getNode } = useReactFlow()
+  const { setViewport, getNode, screenToFlowPosition } = useReactFlow()
 
   // Predictable zoom level for the "focus" action. Same value every time.
   const FOCUS_ZOOM = 1.5
 
-  // Deterministic centering. Computes the viewport transform directly from:
-  //   - the pane's own DOM bounding box (not ReactFlow's internal store which
-  //     can be stale on first render),
-  //   - the target node's dagre-computed position,
-  //   - the node's actual measured DOM size if available, falling back to
-  //     (NODE_W, NODE_H) so dagre math stays consistent.
-  // Screen pixel = flowCoord * zoom + translate  =>  translate = paneCenter - center * zoom
+  // Deterministic centering that bypasses ReactFlow's internal node-position
+  // bookkeeping entirely. We read the target node's REAL bounding rect from
+  // the DOM (React Flow renders each node as `.react-flow__node[data-id=X]`
+  // with the viewport transform already applied), convert its screen-space
+  // centre back to flow coordinates via screenToFlowPosition, then project
+  // those flow coordinates to a new viewport translate at the target zoom.
+  //
+  // Screen = flow * zoom + translate  =>  translate = paneHalf - centerFlow * zoom
   const focusOnNode = useCallback((nodeId) => {
     if (!nodeId) return false
     const pane = paneRef.current
     if (!pane) return false
-    const rect = pane.getBoundingClientRect()
-    if (!rect.width || !rect.height) return false
-    const rfNode = getNode(nodeId)
-    if (!rfNode || !rfNode.position) return false
+    const paneRect = pane.getBoundingClientRect()
+    if (!paneRect.width || !paneRect.height) return false
 
-    const w = rfNode.measured?.width || rfNode.width || NODE_W
-    const h = rfNode.measured?.height || rfNode.height || NODE_H
-    const cx = rfNode.position.x + w / 2
-    const cy = rfNode.position.y + h / 2
+    const nodeEl = pane.querySelector(`.react-flow__node[data-id="${CSS.escape(nodeId)}"]`)
+    if (!nodeEl) return false
+    const nr = nodeEl.getBoundingClientRect()
+    if (!nr.width || !nr.height) return false
+
+    // Node centre in absolute screen coordinates → flow coordinates.
+    const centerFlow = screenToFlowPosition({
+      x: nr.left + nr.width / 2,
+      y: nr.top + nr.height / 2,
+    })
 
     const zoom = FOCUS_ZOOM
-    const x = rect.width / 2 - cx * zoom
-    const y = rect.height / 2 - cy * zoom
+    const x = paneRect.width / 2 - centerFlow.x * zoom
+    const y = paneRect.height / 2 - centerFlow.y * zoom
     setViewport({ x, y, zoom }, { duration: 650 })
     return true
-  }, [getNode, setViewport])
+  }, [screenToFlowPosition, setViewport])
 
   const loadEdges = () => fetchEdgesGraph()
     .then(d => { setAllEdges(d); setEdgesFetched(true) })
@@ -368,9 +373,10 @@ function TreeViewInner() {
   //   4. The pane's DOM bounding box to have real width/height (browser
   //      layout pass completed).
   //
-  // Then we either focus on the highlight target, restore the saved viewport,
-  // or run the default fit. Double rAF lets React Flow finish its internal
-  // measurement pass so getNode(id).measured is populated.
+  // We then retry focusOnNode for up to ~30 frames because the target node's
+  // DOM element might not be rendered on the first frame (React Flow renders
+  // nodes after layout). Each retry re-queries the DOM; once it finds the
+  // rendered node, it centres and stops.
   useEffect(() => {
     if (initDone.current) return
     if (!rfReady) return
@@ -382,9 +388,10 @@ function TreeViewInner() {
 
     initDone.current = true
 
-    const runInit = () => {
-      if (highlightId && focusOnNode(highlightId)) return
+    let cancelled = false
+    let rafId = 0
 
+    const runFallback = () => {
       try {
         const saved = sessionStorage.getItem(VIEWPORT_KEY)
         if (saved) {
@@ -395,14 +402,30 @@ function TreeViewInner() {
           }
         }
       } catch {}
-
       fitAllNodes()
     }
 
-    const raf1 = requestAnimationFrame(() => {
-      requestAnimationFrame(runInit)
-    })
-    return () => cancelAnimationFrame(raf1)
+    const tryFocus = (attempt) => {
+      if (cancelled) return
+      if (highlightId && focusOnNode(highlightId)) return
+      if (attempt < 30) {
+        rafId = requestAnimationFrame(() => tryFocus(attempt + 1))
+        return
+      }
+      // DOM never produced the node — fall back.
+      runFallback()
+    }
+
+    if (highlightId) {
+      rafId = requestAnimationFrame(() => tryFocus(0))
+    } else {
+      rafId = requestAnimationFrame(() => requestAnimationFrame(runFallback))
+    }
+
+    return () => {
+      cancelled = true
+      if (rafId) cancelAnimationFrame(rafId)
+    }
   }, [rfReady, nodesFetched, edgesFetched, finalsFetched, flowNodes.length, highlightId, focusOnNode, fitAllNodes, setViewport, getNode])
 
   return (
