@@ -653,7 +653,7 @@ function TreeViewInner() {
   }, [rfReady, nodesFetched, edgesFetched, finalsFetched, flowNodes.length, highlightId, focusOnNode, fitAllNodes, setViewport, getNode, graphBounds, dynMinZoom, isPageReload])
 
   return (
-    <div className="h-screen flex flex-col" onClick={() => setContextMenu(null)}>
+    <div className="h-screen flex flex-col overflow-hidden" onClick={() => setContextMenu(null)}>
       {/* Toolbar */}
       <div className="bg-white border-b px-4 py-3 flex items-center gap-3 flex-wrap">
         <h1 className="text-lg font-bold whitespace-nowrap">Дерево</h1>
@@ -693,7 +693,7 @@ function TreeViewInner() {
         </div>
       )}
 
-      <div className="flex-1 flex">
+      <div className="flex-1 flex min-h-0">
         {/* Sidebar */}
         <div className="w-72 bg-white border-r overflow-y-auto text-xs">
           {filteredNodes.map(n => (
