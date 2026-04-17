@@ -430,14 +430,21 @@ function TreeViewInner() {
     return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad }
   }, [laidOutNodes, getNode])
 
-  // Dynamic minimum zoom: the user should never be able to zoom out further
-  // than "the whole graph fits with a small margin". Below that level the
-  // graph shrinks to nothing and the UX becomes confusing.
+  // Dynamic minimum zoom: the user should never be able to zoom out so far
+  // that the graph visually vanishes. Below this level ReactFlow refuses
+  // to zoom out any further.
   //
   // We explicitly do NOT use translateExtent — it interferes with cursor-
   // anchored wheel zoom and with free panning once the viewport is larger
   // than the extent, which makes the graph feel "stuck".
-  const [dynMinZoom, setDynMinZoom] = useState(0.1)
+  //
+  // Important: the factor MUST be strictly below the zoom fitAllNodes
+  // produces (fit × 0.7 = 1 - 2·padding, padding = 0.15). Otherwise
+  // ReactFlow clamps the initial fit up to minZoom while the translate
+  // was computed for the smaller zoom — the graph shifts off-screen.
+  // 0.5 leaves a comfortable margin and still guarantees that at max
+  // zoom-out the graph occupies at least 50 % of the pane.
+  const [dynMinZoom, setDynMinZoom] = useState(0.02)
   useEffect(() => {
     if (!graphBounds) return
     const compute = () => {
@@ -447,9 +454,7 @@ function TreeViewInner() {
       const gh = graphBounds.maxY - graphBounds.minY
       if (gw <= 0 || gh <= 0) return
       const fit = Math.min(pane.width / gw, pane.height / gh)
-      // fit × 0.9 so the user still has a little margin around the graph at
-      // the most zoomed-out level. Clamped to avoid absurd values.
-      const minZ = Math.max(0.05, Math.min(fit * 0.9, 1))
+      const minZ = Math.max(0.02, Math.min(fit * 0.5, 1))
       setDynMinZoom(minZ)
     }
     compute()
@@ -513,14 +518,17 @@ function TreeViewInner() {
     const padding = 0.15
     const zoomX = (rect.width * (1 - padding * 2)) / graphW
     const zoomY = (rect.height * (1 - padding * 2)) / graphH
-    const zoom = Math.max(0.05, Math.min(zoomX, zoomY, 1.5))
+    // Floor to dynMinZoom so ReactFlow doesn't clamp the zoom up while
+    // we've computed translate for a smaller one (that shifts the graph
+    // out of view).
+    const zoom = Math.max(dynMinZoom, 0.02, Math.min(zoomX, zoomY, 1.5))
     const cx = (minX + maxX) / 2
     const cy = (minY + maxY) / 2
     const x = rect.width / 2 - cx * zoom
     const y = rect.height / 2 - cy * zoom
     setViewport({ x, y, zoom }, { duration: 0 })
     return true
-  }, [flowNodes, getNode, setViewport])
+  }, [flowNodes, getNode, setViewport, dynMinZoom])
 
   // One-time viewport initialization. We wait for:
   //   1. The ReactFlow instance to be ready (onInit fired)
@@ -556,7 +564,10 @@ function TreeViewInner() {
     const isSavedViewportValid = (vp) => {
       if (!vp || typeof vp.x !== 'number' || typeof vp.y !== 'number' || typeof vp.zoom !== 'number') return false
       if (!Number.isFinite(vp.x) || !Number.isFinite(vp.y) || !Number.isFinite(vp.zoom)) return false
-      if (vp.zoom < 0.1 || vp.zoom > 3) return false
+      // Zoom must be within the ACTUAL bounds ReactFlow allows right now.
+      // If dynMinZoom hasn't updated yet, fall back to the permissive default.
+      const lowerZoom = Math.max(0.02, dynMinZoom)
+      if (vp.zoom < lowerZoom || vp.zoom > 3) return false
       if (!graphBounds) return false
       const pane = paneRef.current?.getBoundingClientRect()
       if (!pane || !pane.width || !pane.height) return false
@@ -607,7 +618,7 @@ function TreeViewInner() {
       cancelled = true
       if (rafId) cancelAnimationFrame(rafId)
     }
-  }, [rfReady, nodesFetched, edgesFetched, finalsFetched, flowNodes.length, highlightId, focusOnNode, fitAllNodes, setViewport, getNode, graphBounds])
+  }, [rfReady, nodesFetched, edgesFetched, finalsFetched, flowNodes.length, highlightId, focusOnNode, fitAllNodes, setViewport, getNode, graphBounds, dynMinZoom])
 
   return (
     <div className="h-screen flex flex-col" onClick={() => setContextMenu(null)}>
