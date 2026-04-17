@@ -8,12 +8,13 @@ dist/
 pgdata/
 *.tar.gz
 venv/
-deploy.py
-deploy_admin.py
+deploy*.py
 fix_*.py
 check_*.py
 diagnose.py
 verify.py
+audit_*.py
+test_engine_logic.py
 ai.xlsx
 edit.docx
 decision_tree.md
