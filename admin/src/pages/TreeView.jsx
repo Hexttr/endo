@@ -430,17 +430,31 @@ function TreeViewInner() {
     return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad }
   }, [laidOutNodes, getNode])
 
-  // translateExtent limits how far the camera can pan away from the graph.
-  // Kept tight on purpose: the pane centre must always stay inside (or at
-  // most a small buffer outside) the red frame. Otherwise users can reload
-  // into a viewport that shows empty space.
-  const translateExtent = useMemo(() => {
-    if (!graphBounds) return undefined
-    const buf = 80
-    return [
-      [graphBounds.minX - buf, graphBounds.minY - buf],
-      [graphBounds.maxX + buf, graphBounds.maxY + buf],
-    ]
+  // Dynamic minimum zoom: the user should never be able to zoom out further
+  // than "the whole graph fits with a small margin". Below that level the
+  // graph shrinks to nothing and the UX becomes confusing.
+  //
+  // We explicitly do NOT use translateExtent — it interferes with cursor-
+  // anchored wheel zoom and with free panning once the viewport is larger
+  // than the extent, which makes the graph feel "stuck".
+  const [dynMinZoom, setDynMinZoom] = useState(0.1)
+  useEffect(() => {
+    if (!graphBounds) return
+    const compute = () => {
+      const pane = paneRef.current?.getBoundingClientRect()
+      if (!pane || !pane.width || !pane.height) return
+      const gw = graphBounds.maxX - graphBounds.minX
+      const gh = graphBounds.maxY - graphBounds.minY
+      if (gw <= 0 || gh <= 0) return
+      const fit = Math.min(pane.width / gw, pane.height / gh)
+      // fit × 0.9 so the user still has a little margin around the graph at
+      // the most zoomed-out level. Clamped to avoid absurd values.
+      const minZ = Math.max(0.05, Math.min(fit * 0.9, 1))
+      setDynMinZoom(minZ)
+    }
+    compute()
+    window.addEventListener('resize', compute)
+    return () => window.removeEventListener('resize', compute)
   }, [graphBounds])
 
   // flowNodes = real nodes + a non-interactive red frame that outlines the
@@ -675,9 +689,8 @@ function TreeViewInner() {
             onConnect={onConnect}
             onEdgeContextMenu={onEdgeContextMenu}
             onMoveEnd={onMoveEnd}
-            minZoom={0.02}
+            minZoom={dynMinZoom}
             maxZoom={3}
-            translateExtent={translateExtent}
             defaultEdgeOptions={{ type: 'smoothstep' }}
           >
             <Background gap={20} size={1} color="#e5e7eb" />
