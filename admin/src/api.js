@@ -8,6 +8,18 @@ function getHeaders() {
   };
 }
 
+async function request(url, options = {}) {
+  const res = await fetch(url, { headers: getHeaders(), ...options });
+  if (res.status === 204) return null;
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ── Auth ──────────────────────────────────────────────────────────
+
 export async function login(username, password) {
   const res = await fetch(`${BASE}/auth/login`, {
     method: 'POST',
@@ -20,65 +32,105 @@ export async function login(username, password) {
   return data;
 }
 
-export async function fetchNodes(section) {
-  const url = section ? `${BASE}/nodes/?section=${section}` : `${BASE}/nodes/`;
-  const res = await fetch(url, { headers: getHeaders() });
-  return res.json();
-}
-
-export async function fetchNode(id) {
-  const res = await fetch(`${BASE}/nodes/${id}`, { headers: getHeaders() });
-  return res.json();
-}
-
-export async function updateNode(id, data) {
-  const res = await fetch(`${BASE}/nodes/${id}`, {
-    method: 'PATCH',
-    headers: getHeaders(),
-    body: JSON.stringify(data),
-  });
-  return res.json();
-}
-
-export async function fetchFinals() {
-  const res = await fetch(`${BASE}/finals/`, { headers: getHeaders() });
-  return res.json();
-}
-
-export async function fetchFinal(id) {
-  const res = await fetch(`${BASE}/finals/${id}`, { headers: getHeaders() });
-  return res.json();
-}
-
-export async function updateFinal(id, data) {
-  const res = await fetch(`${BASE}/finals/${id}`, {
-    method: 'PATCH',
-    headers: getHeaders(),
-    body: JSON.stringify(data),
-  });
-  return res.json();
-}
-
-export async function fetchEdges() {
-  const res = await fetch(`${BASE}/edges/graph`, { headers: getHeaders() });
-  return res.json();
-}
-
-export async function fetchSections() {
-  const res = await fetch(`${BASE}/nodes/sections/list`, { headers: getHeaders() });
-  return res.json();
-}
-
-export async function fetchSessions(params = {}) {
-  const qs = new URLSearchParams(params).toString();
-  const res = await fetch(`${BASE}/sessions/?${qs}`, { headers: getHeaders() });
-  return res.json();
-}
-
 export function isLoggedIn() {
   return !!localStorage.getItem('token');
 }
 
 export function logout() {
   localStorage.removeItem('token');
+}
+
+// ── Nodes ─────────────────────────────────────────────────────────
+
+export function fetchNodes(section) {
+  const url = section ? `${BASE}/nodes/?section=${section}` : `${BASE}/nodes/`;
+  return request(url);
+}
+
+export function fetchNode(id) {
+  return request(`${BASE}/nodes/${id}`);
+}
+
+export function createNode(data) {
+  return request(`${BASE}/nodes/`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function updateNode(id, data) {
+  return request(`${BASE}/nodes/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export function deleteNode(id) {
+  return request(`${BASE}/nodes/${id}`, { method: 'DELETE' });
+}
+
+// ── Options (sub-resource of nodes) ───────────────────────────────
+
+export function createOption(nodeId, data) {
+  return request(`${BASE}/nodes/${nodeId}/options`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function updateOption(nodeId, optionDbId, data) {
+  return request(`${BASE}/nodes/${nodeId}/options/${optionDbId}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export function deleteOption(nodeId, optionDbId) {
+  return request(`${BASE}/nodes/${nodeId}/options/${optionDbId}`, { method: 'DELETE' });
+}
+
+// ── Edges ─────────────────────────────────────────────────────────
+
+export function fetchEdges(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return request(`${BASE}/edges/?${qs}`);
+}
+
+export function fetchEdgesGraph() {
+  return request(`${BASE}/edges/graph`);
+}
+
+export function createEdge(data) {
+  return request(`${BASE}/edges/`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function updateEdge(edgeId, data) {
+  return request(`${BASE}/edges/${edgeId}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export function deleteEdge(edgeId) {
+  return request(`${BASE}/edges/${edgeId}`, { method: 'DELETE' });
+}
+
+// ── Finals ────────────────────────────────────────────────────────
+
+export function fetchFinals() {
+  return request(`${BASE}/finals/`);
+}
+
+export function fetchFinal(id) {
+  return request(`${BASE}/finals/${id}`);
+}
+
+export function createFinal(data) {
+  return request(`${BASE}/finals/`, { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function updateFinal(id, data) {
+  return request(`${BASE}/finals/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+}
+
+export function deleteFinal(id) {
+  return request(`${BASE}/finals/${id}`, { method: 'DELETE' });
+}
+
+// ── Sections ──────────────────────────────────────────────────────
+
+export function fetchSections() {
+  return request(`${BASE}/nodes/sections/list`);
+}
+
+// ── Sessions ──────────────────────────────────────────────────────
+
+export function fetchSessions(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return request(`${BASE}/sessions/?${qs}`);
 }

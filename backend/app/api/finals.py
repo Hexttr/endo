@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Response
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.models import Final, AuditLog, User
-from app.schemas import FinalRead, FinalUpdate
+from app.models import Final, Edge, Option, AuditLog, User
+from app.schemas import FinalRead, FinalCreate, FinalUpdate
 from app.api.auth import get_current_user
 
 router = APIRouter(prefix="/finals", tags=["finals"])
@@ -25,6 +25,28 @@ async def get_final(final_id: str, db: AsyncSession = Depends(get_db)):
     return final
 
 
+@router.post("/", response_model=FinalRead, status_code=201)
+async def create_final(
+    body: FinalCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    existing = (await db.execute(select(Final).where(Final.id == body.id))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Final '{body.id}' already exists")
+
+    final = Final(**body.model_dump())
+    db.add(final)
+    db.add(AuditLog(
+        user_id=current_user.id, action="create",
+        entity_type="final", entity_id=body.id,
+        new_value=body.model_dump(),
+    ))
+    await db.commit()
+    await db.refresh(final)
+    return final
+
+
 @router.patch("/{final_id}", response_model=FinalRead)
 async def update_final(
     final_id: str,
@@ -42,15 +64,44 @@ async def update_final(
     for key, value in updates.items():
         setattr(final, key, value)
 
-    audit = AuditLog(
-        user_id=current_user.id,
-        action="update",
-        entity_type="final",
-        entity_id=final_id,
-        old_value=old_values,
-        new_value=updates,
-    )
-    db.add(audit)
+    db.add(AuditLog(
+        user_id=current_user.id, action="update",
+        entity_type="final", entity_id=final_id,
+        old_value=old_values, new_value=updates,
+    ))
     await db.commit()
     await db.refresh(final)
     return final
+
+
+@router.delete("/{final_id}", status_code=204)
+async def delete_final(
+    final_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    final = (await db.execute(select(Final).where(Final.id == final_id))).scalar_one_or_none()
+    if not final:
+        raise HTTPException(status_code=404, detail="Final not found")
+
+    incoming_edges = (await db.execute(
+        select(func.count()).select_from(Edge).where(Edge.to_node_id == final_id)
+    )).scalar()
+    incoming_opts = (await db.execute(
+        select(func.count()).select_from(Option).where(Option.next_node_id == final_id)
+    )).scalar()
+    refs = incoming_edges + incoming_opts
+    if refs > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot delete: {refs} incoming references. Remove them first.",
+        )
+
+    db.add(AuditLog(
+        user_id=current_user.id, action="delete",
+        entity_type="final", entity_id=final_id,
+        old_value={"diagnosis": final.diagnosis},
+    ))
+    await db.delete(final)
+    await db.commit()
+    return Response(status_code=204)

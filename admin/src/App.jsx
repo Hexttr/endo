@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom'
 import { isLoggedIn, logout, login } from './api'
 import Dashboard from './pages/Dashboard'
 import TreeView from './pages/TreeView'
+import NodeList from './pages/NodeList'
 import NodeEditor from './pages/NodeEditor'
 import FinalsList from './pages/FinalsList'
 import FinalEditor from './pages/FinalEditor'
 import SessionsList from './pages/SessionsList'
-import { LayoutDashboard, GitBranch, FileText, Users, LogOut } from 'lucide-react'
+import { LayoutDashboard, GitBranch, List, FileText, Users, LogOut } from 'lucide-react'
 
 function LoginPage({ onLogin }) {
   const [username, setUsername] = useState('')
@@ -27,7 +28,7 @@ function LoginPage({ onLogin }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-indigo-900">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <h1 className="text-2xl font-bold text-center mb-2">🏥 Endo Bot</h1>
+        <h1 className="text-2xl font-bold text-center mb-2">Endo Bot</h1>
         <p className="text-gray-500 text-center mb-6">Панель управления</p>
         {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -59,15 +60,16 @@ function Layout({ children, onLogout }) {
   const links = [
     { to: '/', icon: <LayoutDashboard size={18} />, label: 'Обзор' },
     { to: '/tree', icon: <GitBranch size={18} />, label: 'Дерево' },
+    { to: '/nodes', icon: <List size={18} />, label: 'Узлы' },
     { to: '/finals', icon: <FileText size={18} />, label: 'Диагнозы' },
     { to: '/sessions', icon: <Users size={18} />, label: 'Сессии' },
   ]
 
   return (
     <div className="min-h-screen flex">
-      <nav className="w-64 bg-gray-900 text-white flex flex-col">
+      <nav className="w-64 bg-gray-900 text-white flex flex-col shrink-0">
         <div className="p-6 border-b border-gray-700">
-          <h1 className="text-lg font-bold">🏥 Endo Bot Admin</h1>
+          <h1 className="text-lg font-bold">Endo Bot Admin</h1>
           <p className="text-gray-400 text-xs mt-1">Управление логикой бота</p>
         </div>
         <div className="flex-1 py-4">
@@ -113,6 +115,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/tree" element={<TreeView />} />
+          <Route path="/nodes" element={<NodeList />} />
           <Route path="/nodes/:nodeId" element={<NodeEditor />} />
           <Route path="/finals" element={<FinalsList />} />
           <Route path="/finals/:finalId" element={<FinalEditor />} />

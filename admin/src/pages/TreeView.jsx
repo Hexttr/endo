@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
-import { ReactFlow, Controls, Background, MiniMap } from '@xyflow/react'
+import {
+  ReactFlow, Controls, Background, MiniMap,
+  useReactFlow, ReactFlowProvider,
+} from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import dagre from 'dagre'
-import { fetchNodes, fetchEdges, fetchSections, fetchFinals } from '../api'
+import { fetchNodes, fetchEdgesGraph, fetchSections, fetchFinals, createEdge, deleteEdge, updateEdge } from '../api'
 
 const SECTION_COLORS = {
   branch_a: { bg: '#fef2f2', border: '#f87171', badge: '#dc2626' },
@@ -29,16 +32,11 @@ function layoutGraph(rawNodes, rawEdges) {
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
   g.setGraph({ rankdir: 'TB', nodesep: 40, ranksep: 80, edgesep: 20 })
-
   rawNodes.forEach(n => g.setNode(n.id, { width: NODE_W, height: NODE_H }))
   rawEdges.forEach(e => {
-    if (g.hasNode(e.source) && g.hasNode(e.target)) {
-      g.setEdge(e.source, e.target)
-    }
+    if (g.hasNode(e.source) && g.hasNode(e.target)) g.setEdge(e.source, e.target)
   })
-
   dagre.layout(g)
-
   return rawNodes.map(n => {
     const pos = g.node(n.id)
     if (!pos) return { ...n, position: { x: 0, y: 0 } }
@@ -55,7 +53,7 @@ function deduplicateEdges(edges) {
   return Array.from(seen.values())
 }
 
-export default function TreeView() {
+function TreeViewInner() {
   const [searchParams] = useSearchParams()
   const [nodes, setNodes] = useState([])
   const [finals, setFinals] = useState([])
@@ -65,16 +63,38 @@ export default function TreeView() {
   const [search, setSearch] = useState('')
   const [showFinals, setShowFinals] = useState(true)
   const [showLabels, setShowLabels] = useState(false)
+  const [toast, setToast] = useState('')
+  const [contextMenu, setContextMenu] = useState(null)
+  const [editingEdgeLabel, setEditingEdgeLabel] = useState(null)
+  const highlightId = searchParams.get('highlight')
+  const highlightDone = useRef(false)
+
+  const { fitView, getNodes } = useReactFlow()
+
+  const loadEdges = () => fetchEdgesGraph().then(setAllEdges).catch(() => {})
 
   useEffect(() => {
     fetchSections().then(setSections).catch(() => {})
-    fetchEdges().then(setAllEdges).catch(() => {})
+    loadEdges()
     fetchFinals().then(setFinals).catch(() => {})
   }, [])
 
   useEffect(() => {
     fetchNodes(selectedSection || undefined).then(setNodes).catch(() => {})
   }, [selectedSection])
+
+  useEffect(() => {
+    if (!highlightId || highlightDone.current) return
+    const timer = setTimeout(() => {
+      const rfNodes = getNodes()
+      const target = rfNodes.find(n => n.id === highlightId)
+      if (target) {
+        fitView({ nodes: [target], duration: 800, padding: 0.5 })
+        highlightDone.current = true
+      }
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [highlightId, fitView, getNodes, nodes, finals])
 
   const filteredNodes = useMemo(() => {
     if (!search) return nodes
@@ -90,7 +110,6 @@ export default function TreeView() {
     if (showFinals) finalIds.forEach(id => allVisible.add(id))
 
     const raw = []
-
     filteredNodes.forEach(n => {
       (n.options || []).forEach(opt => {
         if (!opt.next_node_id || !allVisible.has(opt.next_node_id)) return
@@ -104,6 +123,7 @@ export default function TreeView() {
           labelBgStyle: { fill: '#fff', fillOpacity: 0.9 },
           labelBgPadding: [2, 1],
           type: 'smoothstep',
+          data: { kind: 'option' },
         })
       })
     })
@@ -114,9 +134,11 @@ export default function TreeView() {
         id: `edge-${e.id}`,
         source: e.from_node_id,
         target: e.to_node_id,
+        label: showLabels && e.label ? e.label.substring(0, 25) : '',
         style: { stroke: '#6366f1', strokeWidth: 2 },
         animated: true,
         type: 'smoothstep',
+        data: { kind: 'db_edge', dbId: e.id, dbLabel: e.label },
       })
     })
 
@@ -126,68 +148,129 @@ export default function TreeView() {
   const navigate = useNavigate()
 
   const onNodeDoubleClick = useCallback((event, node) => {
-    if (node.data?.isFinal) {
-      navigate(`/finals/${node.id}`)
-    } else {
-      navigate(`/nodes/${node.id}`)
-    }
+    if (node.data?.isFinal) navigate(`/finals/${node.id}`)
+    else navigate(`/nodes/${node.id}`)
   }, [navigate])
+
+  const onConnect = useCallback(async (params) => {
+    try {
+      await createEdge({ from_node_id: params.source, to_node_id: params.target })
+      await loadEdges()
+      setToast(`Связь ${params.source} → ${params.target} создана`)
+      setTimeout(() => setToast(''), 3000)
+    } catch (e) {
+      setToast(`Ошибка: ${e.message}`)
+      setTimeout(() => setToast(''), 4000)
+    }
+  }, [])
+
+  const onEdgeContextMenu = useCallback((event, edge) => {
+    event.preventDefault()
+    if (edge.data?.kind !== 'db_edge') return
+    setContextMenu({
+      x: event.clientX, y: event.clientY,
+      edgeId: edge.data.dbId,
+      label: edge.data.dbLabel || '',
+      source: edge.source,
+      target: edge.target,
+    })
+  }, [])
+
+  const handleEdgeDelete = async () => {
+    if (!contextMenu) return
+    if (!confirm(`Удалить связь ${contextMenu.source} → ${contextMenu.target}?`)) {
+      setContextMenu(null)
+      return
+    }
+    try {
+      await deleteEdge(contextMenu.edgeId)
+      await loadEdges()
+      setToast('Связь удалена')
+      setTimeout(() => setToast(''), 3000)
+    } catch (e) {
+      setToast(`Ошибка: ${e.message}`)
+      setTimeout(() => setToast(''), 4000)
+    }
+    setContextMenu(null)
+  }
+
+  const handleEdgeEditLabel = () => {
+    setEditingEdgeLabel({ edgeId: contextMenu.edgeId, label: contextMenu.label })
+    setContextMenu(null)
+  }
+
+  const handleEdgeLabelSave = async () => {
+    if (!editingEdgeLabel) return
+    try {
+      await updateEdge(editingEdgeLabel.edgeId, { label: editingEdgeLabel.label || null })
+      await loadEdges()
+      setToast('Подпись обновлена')
+      setTimeout(() => setToast(''), 3000)
+    } catch (e) {
+      setToast(`Ошибка: ${e.message}`)
+      setTimeout(() => setToast(''), 4000)
+    }
+    setEditingEdgeLabel(null)
+  }
 
   const flowNodes = useMemo(() => {
     const raw = filteredNodes.map(n => {
       const colors = SECTION_COLORS[n.section] || { bg: '#f3f4f6', border: '#d1d5db', badge: '#6b7280' }
       const shortText = n.text.length > 45 ? n.text.substring(0, 43) + '...' : n.text
+      const isHighlighted = n.id === highlightId
       return {
         id: n.id,
         position: { x: 0, y: 0 },
         data: { label: `${n.id} ${shortText}`, section: n.section, isFinal: false },
         style: {
-          background: colors.bg,
-          border: `2px solid ${colors.border}`,
+          background: isHighlighted ? '#fef08a' : colors.bg,
+          border: `${isHighlighted ? 3 : 2}px solid ${isHighlighted ? '#eab308' : colors.border}`,
           borderRadius: '10px',
           padding: '6px 10px',
           fontSize: '10px',
           width: NODE_W,
           lineHeight: '1.3',
           cursor: 'pointer',
+          boxShadow: isHighlighted ? '0 0 12px rgba(234, 179, 8, 0.5)' : 'none',
         },
       }
     })
 
     if (showFinals) {
       finals.forEach(f => {
+        const isHighlighted = f.id === highlightId
         raw.push({
           id: f.id,
           position: { x: 0, y: 0 },
           data: { label: `${f.id} ${f.diagnosis || ''}`, isFinal: true },
           style: {
-            background: '#dcfce7',
-            border: '2px solid #22c55e',
+            background: isHighlighted ? '#fef08a' : '#dcfce7',
+            border: `${isHighlighted ? 3 : 2}px solid ${isHighlighted ? '#eab308' : '#22c55e'}`,
             borderRadius: '14px',
             padding: '6px 10px',
             fontSize: '10px',
             fontWeight: '600',
             width: NODE_W,
             cursor: 'pointer',
+            boxShadow: isHighlighted ? '0 0 12px rgba(234, 179, 8, 0.5)' : 'none',
           },
         })
       })
     }
 
     if (raw.length === 0) return raw
-
     if (flowEdges.length === 0) {
       return raw.map((n, i) => ({
         ...n,
         position: { x: (i % 6) * (NODE_W + 40), y: Math.floor(i / 6) * 100 },
       }))
     }
-
     return layoutGraph(raw, flowEdges)
-  }, [filteredNodes, finals, flowEdges, showFinals])
+  }, [filteredNodes, finals, flowEdges, showFinals, highlightId])
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="h-screen flex flex-col" onClick={() => setContextMenu(null)}>
+      {/* Toolbar */}
       <div className="bg-white border-b px-4 py-3 flex items-center gap-3 flex-wrap">
         <h1 className="text-lg font-bold whitespace-nowrap">Дерево</h1>
         <select
@@ -215,13 +298,24 @@ export default function TreeView() {
         </label>
         <span className="text-gray-400 text-xs ml-auto">
           {flowNodes.length} узлов &middot; {flowEdges.length} связей
+          {highlightId && <span className="ml-2 text-yellow-600 font-semibold">Выделен: {highlightId}</span>}
         </span>
       </div>
 
+      {/* Toast */}
+      {toast && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg text-sm">
+          {toast}
+        </div>
+      )}
+
       <div className="flex-1 flex">
+        {/* Sidebar */}
         <div className="w-72 bg-white border-r overflow-y-auto text-xs">
           {filteredNodes.map(n => (
-            <Link key={n.id} to={`/nodes/${n.id}`} className="block px-3 py-2 border-b hover:bg-gray-50 transition">
+            <Link key={n.id} to={`/nodes/${n.id}`}
+              className={`block px-3 py-2 border-b hover:bg-gray-50 transition ${n.id === highlightId ? 'bg-yellow-50 border-l-4 border-l-yellow-500' : ''}`}
+            >
               <div className="flex items-center justify-between">
                 <span className="font-mono font-semibold text-blue-600">{n.id}</span>
                 <span className="px-1.5 py-0.5 bg-gray-100 rounded text-[10px]">{n.input_type}</span>
@@ -230,7 +324,9 @@ export default function TreeView() {
             </Link>
           ))}
           {showFinals && finals.map(f => (
-            <Link key={f.id} to={`/finals/${f.id}`} className="block px-3 py-2 border-b hover:bg-green-50 transition">
+            <Link key={f.id} to={`/finals/${f.id}`}
+              className={`block px-3 py-2 border-b hover:bg-green-50 transition ${f.id === highlightId ? 'bg-yellow-50 border-l-4 border-l-yellow-500' : ''}`}
+            >
               <div className="flex items-center justify-between">
                 <span className="font-mono font-semibold text-green-700">{f.id}</span>
                 <span className="px-1.5 py-0.5 bg-green-100 text-green-800 rounded text-[10px]">final</span>
@@ -240,13 +336,16 @@ export default function TreeView() {
           ))}
         </div>
 
-        <div className="flex-1">
+        {/* Graph */}
+        <div className="flex-1 relative">
           <ReactFlow
             nodes={flowNodes}
             edges={flowEdges}
-            nodesConnectable={false}
+            nodesConnectable={true}
             nodesDraggable={true}
             onNodeDoubleClick={onNodeDoubleClick}
+            onConnect={onConnect}
+            onEdgeContextMenu={onEdgeContextMenu}
             fitView
             fitViewOptions={{ padding: 0.15 }}
             minZoom={0.02}
@@ -256,17 +355,77 @@ export default function TreeView() {
             <Background gap={20} size={1} color="#e5e7eb" />
             <Controls position="bottom-right" />
             <MiniMap
-              zoomable
-              pannable
-              nodeColor={(n) => {
-                const sec = n.data?.section
-                return SECTION_COLORS[sec]?.border || '#d1d5db'
-              }}
+              zoomable pannable
+              nodeColor={(n) => SECTION_COLORS[n.data?.section]?.border || '#d1d5db'}
               style={{ width: 160, height: 100 }}
             />
           </ReactFlow>
+
+          {/* Edge context menu */}
+          {contextMenu && (
+            <div
+              className="fixed z-50 bg-white border rounded-lg shadow-xl py-1 min-w-[180px]"
+              style={{ left: contextMenu.x, top: contextMenu.y }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-3 py-1.5 text-xs text-gray-400 border-b">
+                {contextMenu.source} → {contextMenu.target}
+              </div>
+              <button
+                onClick={handleEdgeEditLabel}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+              >
+                Редактировать подпись
+              </button>
+              <button
+                onClick={handleEdgeDelete}
+                className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+              >
+                Удалить связь
+              </button>
+            </div>
+          )}
+
+          {/* Edge label edit modal */}
+          {editingEdgeLabel && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setEditingEdgeLabel(null)}>
+              <div className="bg-white rounded-xl shadow-2xl p-6 w-96" onClick={(e) => e.stopPropagation()}>
+                <h3 className="font-semibold mb-3">Подпись связи</h3>
+                <input
+                  type="text"
+                  value={editingEdgeLabel.label}
+                  onChange={(e) => setEditingEdgeLabel({ ...editingEdgeLabel, label: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2 mb-4"
+                  placeholder="Подпись (или оставить пустым)"
+                  autoFocus
+                  onKeyDown={(e) => e.key === 'Enter' && handleEdgeLabelSave()}
+                />
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setEditingEdgeLabel(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
+                    Отмена
+                  </button>
+                  <button onClick={handleEdgeLabelSave} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    Сохранить
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Help hint */}
+          <div className="absolute bottom-3 left-3 bg-white/90 rounded-lg px-3 py-2 text-xs text-gray-500 shadow border">
+            2x клик — редактировать &bull; Перетяните от узла к узлу — новая связь &bull; ПКМ на связи — меню
+          </div>
         </div>
       </div>
     </div>
+  )
+}
+
+export default function TreeView() {
+  return (
+    <ReactFlowProvider>
+      <TreeViewInner />
+    </ReactFlowProvider>
   )
 }
