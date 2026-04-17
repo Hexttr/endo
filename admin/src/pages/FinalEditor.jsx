@@ -59,7 +59,10 @@ export default function FinalEditor() {
         <Link to="/finals" className="text-gray-500 hover:text-gray-700"><ArrowLeft size={20} /></Link>
         <h1 className="text-2xl font-bold">Диагноз: <span className="text-green-700">{final_.id}</span></h1>
         <button
-          onClick={() => navigate(`/tree?highlight=${finalId}`)}
+          onClick={() => {
+            try { sessionStorage.setItem('tree-highlight-target', finalId) } catch {}
+            navigate('/tree')
+          }}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm hover:bg-indigo-100 transition ml-auto"
         >
           <Map size={15} />

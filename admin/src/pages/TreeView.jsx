@@ -53,6 +53,9 @@ function deduplicateEdges(edges) {
   return Array.from(seen.values())
 }
 
+const VIEWPORT_KEY = 'tree-viewport'
+const HIGHLIGHT_KEY = 'tree-highlight-target'
+
 function TreeViewInner() {
   const [searchParams] = useSearchParams()
   const [nodes, setNodes] = useState([])
@@ -66,10 +69,20 @@ function TreeViewInner() {
   const [toast, setToast] = useState('')
   const [contextMenu, setContextMenu] = useState(null)
   const [editingEdgeLabel, setEditingEdgeLabel] = useState(null)
-  const highlightId = searchParams.get('highlight')
-  const highlightDone = useRef(false)
+  // One-shot highlight target is consumed once on mount (e.g. when navigating
+  // from NodeEditor/FinalEditor via "Show on tree"). URL ?highlight= still works
+  // as a fallback for bookmarking/sharing.
+  const [highlightId] = useState(() => {
+    let fromSession = null
+    try {
+      fromSession = sessionStorage.getItem(HIGHLIGHT_KEY)
+      if (fromSession) sessionStorage.removeItem(HIGHLIGHT_KEY)
+    } catch {}
+    return fromSession || searchParams.get('highlight') || null
+  })
+  const initDone = useRef(false)
 
-  const { fitView, getNodes } = useReactFlow()
+  const { fitView, setCenter, setViewport } = useReactFlow()
 
   const loadEdges = () => fetchEdgesGraph().then(setAllEdges).catch(() => {})
 
@@ -83,18 +96,41 @@ function TreeViewInner() {
     fetchNodes(selectedSection || undefined).then(setNodes).catch(() => {})
   }, [selectedSection])
 
-  useEffect(() => {
-    if (!highlightId || highlightDone.current) return
-    const timer = setTimeout(() => {
-      const rfNodes = getNodes()
-      const target = rfNodes.find(n => n.id === highlightId)
+  // One-time viewport initialization: center on highlight, restore saved viewport,
+  // or default fitView. Runs once when the graph has laid out its first nodes.
+  const runInit = useCallback((laidOutNodes) => {
+    if (initDone.current) return
+    if (!laidOutNodes || laidOutNodes.length === 0) return
+    initDone.current = true
+
+    if (highlightId) {
+      const target = laidOutNodes.find(n => n.id === highlightId)
       if (target) {
-        fitView({ nodes: [target], duration: 800, padding: 0.5 })
-        highlightDone.current = true
+        const cx = target.position.x + NODE_W / 2
+        const cy = target.position.y + NODE_H / 2
+        setCenter(cx, cy, { zoom: 1.4, duration: 700 })
+        return
       }
-    }, 600)
-    return () => clearTimeout(timer)
-  }, [highlightId, fitView, getNodes, nodes, finals])
+    }
+
+    try {
+      const saved = sessionStorage.getItem(VIEWPORT_KEY)
+      if (saved) {
+        const vp = JSON.parse(saved)
+        if (vp && typeof vp.x === 'number' && typeof vp.y === 'number' && typeof vp.zoom === 'number') {
+          setViewport(vp, { duration: 0 })
+          return
+        }
+      }
+    } catch {}
+
+    fitView({ padding: 0.15, duration: 0 })
+  }, [highlightId, setCenter, setViewport, fitView])
+
+  const onMoveEnd = useCallback((_, viewport) => {
+    if (!initDone.current) return
+    try { sessionStorage.setItem(VIEWPORT_KEY, JSON.stringify(viewport)) } catch {}
+  }, [])
 
   const filteredNodes = useMemo(() => {
     if (!search) return nodes
@@ -268,6 +304,18 @@ function TreeViewInner() {
     return layoutGraph(raw, flowEdges)
   }, [filteredNodes, finals, flowEdges, showFinals, highlightId])
 
+  useEffect(() => {
+    if (initDone.current) return
+    if (flowNodes.length === 0) return
+    // Wait for the async data to settle so dagre runs on a stable graph.
+    // Edges and finals are fetched independently from nodes — we want them
+    // all in before taking a snapshot for fitView/setCenter/setViewport.
+    const ready = nodes.length > 0 && (allEdges.length > 0 || finals.length > 0)
+    if (!ready) return
+    const timer = setTimeout(() => runInit(flowNodes), 180)
+    return () => clearTimeout(timer)
+  }, [flowNodes, runInit, nodes.length, allEdges.length, finals.length])
+
   return (
     <div className="h-screen flex flex-col" onClick={() => setContextMenu(null)}>
       {/* Toolbar */}
@@ -346,8 +394,7 @@ function TreeViewInner() {
             onNodeDoubleClick={onNodeDoubleClick}
             onConnect={onConnect}
             onEdgeContextMenu={onEdgeContextMenu}
-            fitView
-            fitViewOptions={{ padding: 0.15 }}
+            onMoveEnd={onMoveEnd}
             minZoom={0.02}
             maxZoom={3}
             defaultEdgeOptions={{ type: 'smoothstep' }}

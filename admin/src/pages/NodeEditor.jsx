@@ -182,7 +182,10 @@ export default function NodeEditor() {
           {node.section}
         </span>
         <button
-          onClick={() => navigate(`/tree?highlight=${nodeId}`)}
+          onClick={() => {
+            try { sessionStorage.setItem('tree-highlight-target', nodeId) } catch {}
+            navigate('/tree')
+          }}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm hover:bg-indigo-100 transition ml-auto"
         >
           <Map size={15} />
