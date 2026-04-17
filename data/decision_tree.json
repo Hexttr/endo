@@ -1,0 +1,1614 @@
+{
+  "version": "3.0",
+  "meta": {
+    "title": "Дерево решений: Диагностика ЖКК у детей",
+    "description": "Машиночитаемое представление алгоритма диагностики желудочно-кишечных кровотечений у детей",
+    "source": "decision_tree_flowchart.html v3.0",
+    "clinical_guidelines": "Клинические рекомендации 2021",
+    "input_types": {
+      "single_choice": "Один вариант из списка",
+      "multi_choice": "Чеклист (несколько вариантов)",
+      "yes_no": "Да / Нет / Данные отсутствуют",
+      "numeric": "Числовое значение (с единицами и диапазоном)",
+      "info": "Информационный блок (только 'Далее')",
+      "action": "Действие врача (подтверждение выполнения)"
+    },
+    "unknown_actions": {
+      "safe_default": "Безопасный путь (= 'Нет' + флаг 'требует уточнения')",
+      "branch_c": "Переход в ветку C (неопределённая ситуация)",
+      "skip_with_flag": "Пропуск зависящих правил + флаг 'дообследование'"
+    }
+  },
+
+  "nodes": {
+    "N000": {
+      "id": "N000",
+      "section": "overview",
+      "text": "Ребёнок с подозрением на ЖКК. Педиатр / врач приёмного покоя.",
+      "input_type": "info",
+      "unknown_action": null
+    },
+    "N001": {
+      "id": "N001",
+      "section": "overview",
+      "text": "Определить ведущий клинический синдром",
+      "input_type": "single_choice",
+      "unknown_action": "branch_c",
+      "options": [
+        {"id": "acute", "label": "Острое кровотечение (рвота кровью, мелена, гематохезия)", "next": "A001"},
+        {"id": "chronic", "label": "Хроническое кровотечение (плановое обследование, динамика, хр. симптомы)", "next": "B001"},
+        {"id": "uncertain", "label": "Неопределённая ситуация (неясная клиника, первичная оценка)", "next": "C001"},
+        {"id": "unknown", "label": "Затрудняюсь ответить", "next": "C001"}
+      ]
+    },
+
+    "A001": {
+      "id": "A001",
+      "section": "branch_a",
+      "text": "Гемодинамический статус пациента?",
+      "input_type": "single_choice",
+      "unknown_action": "branch_c",
+      "options": [
+        {"id": "shock", "label": "ШОК: нитевидный пульс, нарушение сознания, бледность, холодный пот", "next": "A002"},
+        {"id": "hypotension", "label": "Гипотензия / тахикардия: АД↓, ЧСС↑ > 20%, ортостат. гипотензия", "next": "A003"},
+        {"id": "stable", "label": "Стабилен: ЧСС и АД в норме, сознание ясное", "next": "A004"},
+        {"id": "mallory_weiss", "label": "Анамнез: рвота, надсадный кашель, травма живота, тяжёлые физ. нагрузки ПЕРЕД кровотечением?", "next": "AMW"},
+        {"id": "unknown", "label": "Затрудняюсь ответить", "next": "C001"}
+      ]
+    },
+    "A002": {
+      "id": "A002",
+      "section": "branch_a",
+      "text": "РЕАНИМАЦИЯ: ABC + ИНТУБАЦИЯ, 2 венозных доступа, кристаллоиды 20 мл/кг, группа крови НЕМЕДЛЕННО, эр. масса при Hb<70 → целевой 70-90, ЭГДС как можно раньше (≤6ч) в центре с возможностью лигирования. При невозможности ЭГДС: зонд Блэкмора (≤4ч)",
+      "input_type": "action",
+      "unknown_action": null
+    },
+    "A003": {
+      "id": "A003",
+      "section": "branch_a",
+      "text": "ГОСПИТАЛИЗАЦИЯ: венозный доступ, инфузия, контроль ЧСС/АД 30-60 мин, ОАК, коагулограмма, эр. масса при Hb<70 → целевой 70-90, ЭГДС как можно раньше (≤12ч) в центре с возможностью лигирования. При невозможности ЭГДС: зонд Блэкмора (≤4ч)",
+      "input_type": "action",
+      "unknown_action": null
+    },
+    "A004": {
+      "id": "A004",
+      "section": "branch_a",
+      "text": "НАБЛЮДЕНИЕ: госпитализация, контроль ЧСС/АД 2-4ч, ОАК, ЭГДС как можно раньше (≤24ч) в центре с возможностью лигирования",
+      "input_type": "action",
+      "unknown_action": null
+    },
+    "AMW": {
+      "id": "AMW",
+      "section": "branch_a",
+      "text": "Синдром Мэллори-Вейсса вероятен?",
+      "input_type": "single_choice",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "yes", "label": "Вероятен", "next": "F15"},
+        {"id": "no", "label": "Нет / неясно → оценить гемодинамику выше", "next": "A001"}
+      ]
+    },
+    "A005": {
+      "id": "A005",
+      "section": "branch_a",
+      "text": "Ребёнок проглотил инородное тело?",
+      "input_type": "yes_no",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "yes", "label": "Да", "next": "A005a"},
+        {"id": "no", "label": "Нет", "next": "A006"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "A006"}
+      ]
+    },
+    "A005a": {
+      "id": "A005a",
+      "section": "branch_a",
+      "text": "Тип и локализация инородного тела?",
+      "input_type": "single_choice",
+      "unknown_action": "branch_c",
+      "options": [
+        {"id": "battery_esophagus", "label": "Батарейка в пищеводе", "next": "IT_E", "urgency": "emergency_2_6h"},
+        {"id": "battery_stomach", "label": "Батарейка в желудке/кишке", "next": "IT_U", "urgency": "urgent_24h"},
+        {"id": "magnet_esophagus", "label": "Магнит в пищеводе", "next": "IT_U", "urgency": "urgent_24h"},
+        {"id": "magnet_stomach", "label": "Магнит в желудке/кишке", "next": "IT_U", "urgency": "urgent_24h"},
+        {"id": "sharp_esophagus", "label": "Остроконечное в пищеводе", "next": "IT_E", "urgency": "emergency_2_6h"},
+        {"id": "sharp_stomach", "label": "Остроконечное в желудке/кишке", "next": "IT_U", "urgency": "urgent_24h"},
+        {"id": "blunt_small_esophagus", "label": "Тупое малое (<2.5см) в пищеводе", "next": "IT_U", "urgency": "urgent_24h"},
+        {"id": "blunt_small_stomach", "label": "Тупое малое в желудке/кишке", "next": "IT_D", "urgency": "deferred_72h"},
+        {"id": "blunt_medium_esophagus", "label": "Тупое среднее (2.5-5см) в пищеводе", "next": "IT_U", "urgency": "urgent_24h"},
+        {"id": "blunt_medium_stomach", "label": "Тупое среднее в желудке/кишке", "next": "IT_D", "urgency": "deferred_72h"},
+        {"id": "large_esophagus", "label": "Большое (>5-6см) в пищеводе", "next": "IT_U", "urgency": "urgent_24h"},
+        {"id": "large_stomach", "label": "Большое в желудке/кишке", "next": "IT_U", "urgency": "urgent_24h"},
+        {"id": "food_bolus_esophagus", "label": "Пищевой комок в пищеводе", "next": "IT_E", "urgency": "emergency"},
+        {"id": "unknown", "label": "Затрудняюсь ответить", "next": "IT_U"}
+      ]
+    },
+    "IT_E": {
+      "id": "IT_E",
+      "section": "branch_a",
+      "text": "ЭКСТРЕННО (<2-6ч): извлечение инородного тела",
+      "input_type": "action",
+      "unknown_action": null
+    },
+    "IT_U": {
+      "id": "IT_U",
+      "section": "branch_a",
+      "text": "СРОЧНО (<24ч): извлечение инородного тела",
+      "input_type": "action",
+      "unknown_action": null
+    },
+    "IT_D": {
+      "id": "IT_D",
+      "section": "branch_a",
+      "text": "ОТСРОЧЕННО (<72ч): наблюдение / извлечение инородного тела",
+      "input_type": "action",
+      "unknown_action": null
+    },
+    "IT_FIN": {
+      "id": "IT_FIN",
+      "section": "branch_a",
+      "text": "Извлечение + осмотр слизистой. После извлечения есть другие находки?",
+      "input_type": "yes_no",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "yes", "label": "Да, есть другие находки", "next": "A006"},
+        {"id": "no", "label": "Инородное тело — единственная причина", "next": "DONE1"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "A006"}
+      ]
+    },
+    "DONE1": {
+      "id": "DONE1",
+      "section": "branch_a",
+      "text": "ЗАВЕРШЕНИЕ: инородное тело извлечено, других патологий нет",
+      "input_type": "info",
+      "is_terminal": true
+    },
+    "A006": {
+      "id": "A006",
+      "section": "branch_a",
+      "text": "Ребёнок выпил химически активную жидкость?",
+      "input_type": "yes_no",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "yes", "label": "Да", "next": "A006a"},
+        {"id": "no", "label": "Нет", "next": "A010"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "A010"}
+      ]
+    },
+    "A006a": {
+      "id": "A006a",
+      "section": "branch_a",
+      "text": "ХИМ. ОЖОГ: НЕ вызывать рвоту! НЕ промывать желудок! Стабилизация ABC, обезболивание (морфин, не НПВС), ЭГДС 6-24ч → Zargar",
+      "input_type": "action",
+      "unknown_action": null,
+      "next": "F14"
+    },
+    "A010": {
+      "id": "A010",
+      "section": "branch_a",
+      "text": "СКРИНИНГ портальной гипертензии (чеклист 9 признаков)",
+      "input_type": "multi_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "autoimmune_hepatitis", "label": "Аутоиммунный гепатит", "group": "single_sufficient"},
+        {"id": "cavernoma", "label": "Кавернома / каверн. трансформация воротной вены", "group": "single_sufficient"},
+        {"id": "vrvp_history", "label": "ВРВП ранее", "group": "single_sufficient"},
+        {"id": "cirrhosis", "label": "Цирроз печени", "group": "need_2"},
+        {"id": "splenomegaly", "label": "Спленомегалия", "group": "need_2"},
+        {"id": "thrombocytopenia", "label": "Тромбоцитопения", "group": "need_2"},
+        {"id": "wilson", "label": "Болезнь Вильсона", "group": "need_2"},
+        {"id": "ulcerative_colitis", "label": "Язвенный колит", "group": "need_2"},
+        {"id": "overlap", "label": "OVERLAP-синдром (ПБЦ+АИГ)", "group": "need_2"},
+        {"id": "omphalitis", "label": "Омфалит в анамнезе", "group": "need_2"},
+        {"id": "portal_thrombosis", "label": "Тромбоз воротной вены в анамнезе", "group": "need_2"}
+      ],
+      "routing_rules": [
+        {"condition": "any_from_group('single_sufficient')", "next": "A020"},
+        {"condition": "count_from_group('need_2') >= 2", "next": "A020"},
+        {"condition": "count_from_group('need_2') == 1", "next": "A011"},
+        {"condition": "count_all() == 0", "next": "A030"}
+      ]
+    },
+    "A011": {
+      "id": "A011",
+      "section": "branch_a",
+      "text": "Подозрение на ВРВП? (1 признак из дополнительных)",
+      "input_type": "yes_no",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "yes", "label": "Да", "next": "A020"},
+        {"id": "no", "label": "Нет", "next": "A030"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "A030"}
+      ]
+    },
+    "A020": {
+      "id": "A020",
+      "section": "branch_a_vrvp",
+      "text": "Класс цирроза по Child-Pugh?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "A", "label": "A (5-6 баллов) — компенсированный, риск ≈5%/год", "next": "A021"},
+        {"id": "B", "label": "B (7-9 баллов) — субкомпенсированный, риск ≈10-15%/год", "next": "A021"},
+        {"id": "C", "label": "C (10-15 баллов) — декомпенсированный, риск ≈15-20%/год", "next": "A021"},
+        {"id": "no_cirrhosis", "label": "Нет цирроза (кавернома и др.)", "next": "A021"},
+        {"id": "unknown", "label": "Нет данных", "next": "A021"}
+      ]
+    },
+    "A021": {
+      "id": "A021",
+      "section": "branch_a_vrvp",
+      "text": "Ранее лигирование / склерозирование?",
+      "input_type": "yes_no",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "yes", "label": "Да → рецидив (риск: A≈30%, B≈50%, C≈70%)", "next": "A022"},
+        {"id": "no", "label": "Нет → первичное", "next": "A022"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "A022"}
+      ]
+    },
+    "A022": {
+      "id": "A022",
+      "section": "branch_a_vrvp",
+      "text": "НАЧАТЬ ДО ЭГДС: октреотид болюс 1 мкг/кг в/в (макс 50 мкг), затем инфузия 1-2 мкг/кг/ч (макс 50 мкг/ч) на 2-5 суток; цефалоспорины III 5-7 дней (ТОЛЬКО при цирротической ПГ!); эр. масса при Hb<70 → целевой 70-90; срочная ЭГДС как можно раньше (≤12ч)",
+      "input_type": "action",
+      "unknown_action": null
+    },
+    "A023": {
+      "id": "A023",
+      "section": "branch_a_vrvp",
+      "text": "Находки ЭГДС при ВРВП?",
+      "input_type": "single_choice",
+      "unknown_action": "branch_c",
+      "options": [
+        {"id": "vrvp_1", "label": "ВРВП 1 ст (<5мм, линейные)", "next": "A024"},
+        {"id": "vrvp_2", "label": "ВРВП 2 ст (5-10мм, извитые)", "next": "A024"},
+        {"id": "vrvp_3", "label": "ВРВП 3 ст (>10мм, узловатые)", "next": "A024"},
+        {"id": "gastric_varices", "label": "Варикоз желудка GOV1/GOV2/IGV1/IGV2", "next": "A024"},
+        {"id": "phg", "label": "Портальная гипертензивная гастропатия", "next": "A024"}
+      ]
+    },
+    "A024": {
+      "id": "A024",
+      "section": "branch_a_vrvp",
+      "text": "Красные знаки? (гемокисты, вишнёвые пятна, варикоз на варикозе)",
+      "input_type": "yes_no",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "yes", "label": "Есть → высокий риск", "next": "F08"},
+        {"id": "no", "label": "Нет", "next": "F08"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "F08"}
+      ]
+    },
+    "A030": {
+      "id": "A030",
+      "section": "branch_a_egds",
+      "text": "Характер кровотечения?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "vomit_blood", "label": "Рвота алой кровью", "next": "A040"},
+        {"id": "coffee_ground", "label": "Рвота кофейной гущей", "next": "A040"},
+        {"id": "melena", "label": "Мелена", "next": "A040"},
+        {"id": "hematochezia", "label": "Гематохезия", "next": "A031"},
+        {"id": "blood_streaks", "label": "Прожилки крови в стуле", "next": "A040"}
+      ]
+    },
+    "A031": {
+      "id": "A031",
+      "section": "branch_a_egds",
+      "text": "Массивная гематохезия + нестабильность?",
+      "input_type": "yes_no",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "yes", "label": "Да → ВЖКТ", "next": "A040"},
+        {"id": "no", "label": "Нет → колоноскопия", "next": "A040"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "A040"}
+      ]
+    },
+    "A040": {
+      "id": "A040",
+      "section": "branch_a_egds",
+      "text": "Факторы риска",
+      "input_type": "multi_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "nsaids", "label": "НПВС?"},
+        {"id": "anticoagulants", "label": "Антикоагулянты?"},
+        {"id": "gcs", "label": "ГКС?"},
+        {"id": "icu", "label": "ОРИТ / критич. состояние?"},
+        {"id": "h_pylori", "label": "H.pylori?"},
+        {"id": "ppi_long", "label": "ИПП длительно?"}
+      ]
+    },
+    "A050": {
+      "id": "A050",
+      "section": "branch_a_egds",
+      "text": "Лабораторные данные",
+      "input_type": "numeric",
+      "unknown_action": "skip_with_flag",
+      "fields": [
+        {"id": "hb", "label": "Hb (г/л)", "unit": "г/л", "range": [40, 200]},
+        {"id": "rbc", "label": "RBC (×10¹²/л)", "unit": "×10¹²/л", "range": [1.0, 7.0]},
+        {"id": "ht", "label": "Ht (%)", "unit": "%", "range": [10, 65]},
+        {"id": "plt", "label": "PLT (×10⁹/л)", "unit": "×10⁹/л", "range": [10, 800]},
+        {"id": "inr", "label": "INR", "unit": "", "range": [0.5, 10.0]},
+        {"id": "wbc", "label": "WBC (×10⁹/л)", "unit": "×10⁹/л", "range": [0.5, 50.0]}
+      ]
+    },
+    "A060": {
+      "id": "A060",
+      "section": "branch_a_egds",
+      "text": "ЭГДС выполнена. Основная находка?",
+      "input_type": "single_choice",
+      "unknown_action": "branch_c",
+      "allow_multiple": true,
+      "options": [
+        {"id": "gastric_ulcer", "label": "Язва желудка", "next": "A061"},
+        {"id": "duodenal_ulcer", "label": "Язва ДПК", "next": "A062"},
+        {"id": "multiple_erosions", "label": "Множественные эрозии", "next": "A070"},
+        {"id": "vrvp", "label": "ВРВП", "next": "A023"},
+        {"id": "polyp_bleeding", "label": "Полип с кровотечением", "next": "A063"},
+        {"id": "esophageal_erosions", "label": "Эрозии пищевода", "next": "A064"},
+        {"id": "burn", "label": "Ожоговое поражение", "next": "F14"},
+        {"id": "mallory_weiss", "label": "Мэллори-Вейсс", "next": "F15"},
+        {"id": "none", "label": "Не выявлено", "next": "PENDING_REEXAM"},
+        {"id": "multiple", "label": "Множественные находки", "next": "MULTIPLE_A"}
+      ],
+      "multiple_findings_priority": ["vrvp", "gastric_ulcer", "duodenal_ulcer", "burn", "multiple_erosions", "esophageal_erosions", "polyp_bleeding"]
+    },
+    "A061": {
+      "id": "A061",
+      "section": "branch_a_egds",
+      "text": "Forrest (язва желудка)?",
+      "input_type": "single_choice",
+      "unknown_action": "branch_c",
+      "options": [
+        {"id": "Ia", "label": "Ia — струйное кровотечение", "next": "F10"},
+        {"id": "Ib", "label": "Ib — диффузное кровотечение", "next": "F10"},
+        {"id": "IIa", "label": "IIa — видимый сосуд", "next": "F10"},
+        {"id": "IIb", "label": "IIb — тромб", "next": "F10"},
+        {"id": "IIc", "label": "IIc — гематин", "next": "F10"},
+        {"id": "III", "label": "III — чистое дно", "next": "F10"}
+      ]
+    },
+    "A062": {
+      "id": "A062",
+      "section": "branch_a_egds",
+      "text": "Forrest (язва ДПК)?",
+      "input_type": "single_choice",
+      "unknown_action": "branch_c",
+      "options": [
+        {"id": "Ia_IIa", "label": "Ia-IIa (активное/видимый сосуд)", "next": "F11"},
+        {"id": "IIb_III", "label": "IIb-III (тромб/чистое дно)", "next": "F11"}
+      ]
+    },
+    "A063": {
+      "id": "A063",
+      "section": "branch_a_egds",
+      "text": "Полип с кровотечением → уточнить тип полипа",
+      "input_type": "info",
+      "next": "B070"
+    },
+    "A064": {
+      "id": "A064",
+      "section": "branch_a_egds",
+      "text": "Эрозии пищевода: дистальный отдел?",
+      "input_type": "yes_no",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "yes", "label": "Да, над Z-линией → Los Angeles", "next": "F13"},
+        {"id": "no", "label": "Другая локализация", "next": "F09"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "F09"}
+      ]
+    },
+    "A070": {
+      "id": "A070",
+      "section": "branch_a_egds",
+      "text": "Локализация эрозий?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "antral", "label": "Антральный отдел", "next": "A071"},
+        {"id": "corpus", "label": "Тело / свод", "next": "A072"}
+      ]
+    },
+    "A071": {
+      "id": "A071",
+      "section": "branch_a_egds",
+      "text": "H.pylori? (антральный отдел)",
+      "input_type": "yes_no",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "yes", "label": "Да", "next": "F09"},
+        {"id": "no_nsaids", "label": "Нет + НПВС", "next": "F12"},
+        {"id": "no_none", "label": "Нет + нет НПВС", "next": "F09"}
+      ]
+    },
+    "A072": {
+      "id": "A072",
+      "section": "branch_a_egds",
+      "text": "Факторы: НПВС? ОРИТ?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "nsaids", "label": "НПВС = Да", "next": "F12"},
+        {"id": "icu", "label": "ОРИТ = Да", "next": "F13a"},
+        {"id": "both", "label": "Оба", "next": "F12"},
+        {"id": "none", "label": "Ни одного", "next": "F09"}
+      ]
+    },
+    "PENDING_REEXAM": {
+      "id": "PENDING_REEXAM",
+      "section": "branch_a_egds",
+      "text": "Источник кровотечения не найден. Рекомендовано: 1) Повторная ЭГДС 12-24ч, 2) Колоноскопия, 3) Видеокапсульная эндоскопия, 4) КТ-ангиография. После результатов вернуться к A060.",
+      "input_type": "info",
+      "is_pending": true,
+      "return_node": "A060"
+    },
+    "MULTIPLE_A": {
+      "id": "MULTIPLE_A",
+      "section": "branch_a_egds",
+      "text": "Множественные находки при ЭГДС. Выберите ВСЕ обнаруженные патологии.",
+      "input_type": "multi_choice",
+      "priority_order": ["vrvp", "gastric_ulcer", "duodenal_ulcer", "burn", "multiple_erosions", "esophageal_erosions", "polyp_bleeding"],
+      "options": [
+        {"id": "vrvp", "label": "ВРВП", "priority": 1, "next": "A023"},
+        {"id": "gastric_ulcer", "label": "Язва желудка", "priority": 2, "next": "A061"},
+        {"id": "duodenal_ulcer", "label": "Язва ДПК", "priority": 3, "next": "A062"},
+        {"id": "burn", "label": "Ожоговое поражение", "priority": 4, "next": "F14"},
+        {"id": "erosions", "label": "Эрозии", "priority": 5, "next": "A070"},
+        {"id": "ere", "label": "Эрозии пищевода", "priority": 6, "next": "A064"},
+        {"id": "polyp", "label": "Полип", "priority": 7, "next": "A063"}
+      ]
+    },
+
+    "B001": {
+      "id": "B001",
+      "section": "branch_b",
+      "text": "Есть предварительный диагноз?",
+      "input_type": "yes_no",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "yes", "label": "Да", "next": "B002"},
+        {"id": "no", "label": "Нет", "next": "B010"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B010"}
+      ]
+    },
+    "B002": {
+      "id": "B002",
+      "section": "branch_b",
+      "text": "Какой предварительный диагноз?",
+      "input_type": "single_choice",
+      "unknown_action": "branch_c",
+      "options": [
+        {"id": "polyp", "label": "Полип", "next": "B070"},
+        {"id": "vrvp", "label": "ВРВП", "next": "B080"},
+        {"id": "gastric_ulcer", "label": "ЯБ желудка", "next": "B090"},
+        {"id": "duodenal_ulcer", "label": "ЯБ ДПК", "next": "B091"},
+        {"id": "erosive_gastritis", "label": "Эрозивный гастрит", "next": "B100"},
+        {"id": "nsaids_gastropathy", "label": "НПВС-гастропатия", "next": "F12"},
+        {"id": "stress_erosions", "label": "Стресс-эрозии", "next": "F13a"},
+        {"id": "reflux_esophagitis", "label": "Рефлюкс-эзофагит", "next": "B110"},
+        {"id": "chemical_burn", "label": "Хим. ожог", "next": "B120"}
+      ]
+    },
+    "B010": {
+      "id": "B010",
+      "section": "branch_b",
+      "text": "Начало сбора данных",
+      "input_type": "info",
+      "next": "B020"
+    },
+    "B020": {
+      "id": "B020",
+      "section": "branch_b",
+      "text": "Ранее ЭГДС?",
+      "input_type": "single_choice",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "no", "label": "Нет", "next": "B030"},
+        {"id": "yes_recent", "label": "Да, < 3 мес", "next": "B021"},
+        {"id": "yes_old", "label": "Да, > 3 мес", "next": "B021"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B030"}
+      ]
+    },
+    "B021": {
+      "id": "B021",
+      "section": "branch_b",
+      "text": "Что выявлено при предыдущей ЭГДС?",
+      "input_type": "single_choice",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "polyps", "label": "Полипы", "next": "B070"},
+        {"id": "vrvp", "label": "ВРВП", "next": "B080"},
+        {"id": "ulcer", "label": "Язва", "next": "B090"},
+        {"id": "erosions", "label": "Эрозии", "next": "B100"},
+        {"id": "reflux", "label": "Рефлюкс-эзофагит", "next": "B110"},
+        {"id": "normal", "label": "Норма", "next": "B022"}
+      ]
+    },
+    "B022": {
+      "id": "B022",
+      "section": "branch_b",
+      "text": "Колоноскопия ранее?",
+      "input_type": "single_choice",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "polyps", "label": "Полипы толстой кишки → множественные? → полипозный синдром", "next": "B070"},
+        {"id": "normal", "label": "Норма / не выполнялась", "next": "B030"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B030"}
+      ]
+    },
+    "B030": {
+      "id": "B030",
+      "section": "branch_b_complaints",
+      "text": "Боль в животе?",
+      "input_type": "yes_no",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "yes", "label": "Да → уточнить характер", "next": "B030a"},
+        {"id": "no", "label": "Нет", "next": "B031"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B031"}
+      ]
+    },
+    "B030a": {
+      "id": "B030a",
+      "section": "branch_b_complaints",
+      "text": "Характеристика боли",
+      "input_type": "multi_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "epigastric", "label": "Эпигастрий → ЯБЖ/гастрит"},
+        {"id": "periumbilical", "label": "Околопупочная → ЯБ ДПК"},
+        {"id": "retrosternal", "label": "За грудиной → ЭРЭ"},
+        {"id": "after_meal", "label": "Через 15-30 мин после еды → ЯБЖ"},
+        {"id": "hungry_night", "label": "Голодные/ночные → ЯБ ДПК"},
+        {"id": "burning", "label": "Жгучая → ЭРЭ"},
+        {"id": "dagger", "label": "Кинжальная → ⚡ перфорация!"}
+      ]
+    },
+    "B031": {
+      "id": "B031",
+      "section": "branch_b_complaints",
+      "text": "Рвота?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "no", "label": "Нет", "next": "B032"},
+        {"id": "food", "label": "Пищей", "next": "B032"},
+        {"id": "blood_streaks", "label": "С прожилками крови", "next": "B031a"},
+        {"id": "coffee_blood", "label": "Кофейной гущей / кровью → ⚡ ВЕТКА A!", "next": "A001"}
+      ]
+    },
+    "B031a": {
+      "id": "B031a",
+      "section": "branch_b_complaints",
+      "text": "Характеристика рвоты с кровью",
+      "input_type": "single_choice",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "fresh_small", "label": "Свежая кровь, мало + пищевые массы → оценить", "next": "B032"},
+        {"id": "bile", "label": "Жёлчная рвота → оценить", "next": "B032"},
+        {"id": "abundant", "label": "Обильная кровь → ⚡ ВЕТКА A!", "next": "A001"}
+      ]
+    },
+    "B032": {
+      "id": "B032",
+      "section": "branch_b_complaints",
+      "text": "Изжога?",
+      "input_type": "yes_no",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "yes", "label": "Да → характерно для ГЭРБ/ЭРЭ", "next": "B033"},
+        {"id": "no", "label": "Нет", "next": "B033"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B033"}
+      ]
+    },
+    "B033": {
+      "id": "B033",
+      "section": "branch_b_complaints",
+      "text": "Изменения стула?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "normal", "label": "Обычный (оформленный, обычный цвет)", "next": "B034"},
+        {"id": "blood_streaks", "label": "Прожилки крови → полип, КРР, трещина, геморрой", "next": "B034"},
+        {"id": "melena", "label": "Мелена (чёрный, дегтеобразный, зловонный) → кровопотеря >50-100мл → рассмотреть Ветку A!", "next": "B034"},
+        {"id": "hematochezia", "label": "Гематохезия (алая кровь) → массивное ВЖКТ или нижнее ЖКТ", "next": "B034"},
+        {"id": "occult_blood", "label": "Скрытая кровь + → хроническая кровопотеря, анемия", "next": "B034"}
+      ]
+    },
+    "B034": {
+      "id": "B034",
+      "section": "branch_b_complaints",
+      "text": "Асцит?",
+      "input_type": "yes_no",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "yes", "label": "Да → портальная гипертензия", "next": "B035"},
+        {"id": "no", "label": "Нет", "next": "B035"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B035"}
+      ]
+    },
+    "B035": {
+      "id": "B035",
+      "section": "branch_b_complaints",
+      "text": "Желтуха?",
+      "input_type": "yes_no",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "yes", "label": "Да → патология печени", "next": "B036"},
+        {"id": "no", "label": "Нет", "next": "B036"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B036"}
+      ]
+    },
+    "B036": {
+      "id": "B036",
+      "section": "branch_b_complaints",
+      "text": "Пигментные пятна на губах / слизистой?",
+      "input_type": "yes_no",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "yes", "label": "Да → С-м Пейтца-Егерса!", "next": "B040"},
+        {"id": "no", "label": "Нет", "next": "B040"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B040"}
+      ]
+    },
+    "B040": {
+      "id": "B040",
+      "section": "branch_b_history",
+      "text": "Длительность заболевания?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "hours_days", "label": "Часы-дни → НПВС, стресс, хим. ожог", "next": "B041"},
+        {"id": "weeks", "label": "Недели → обострение ЯБ, эрозивный гастрит", "next": "B041"},
+        {"id": "months_years", "label": "Месяцы-годы → ЯБ, полипоз, ВРВП, ЭРЭ", "next": "B041"}
+      ]
+    },
+    "B041": {
+      "id": "B041",
+      "section": "branch_b_history",
+      "text": "С чего началось?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "nsaids", "label": "Приём НПВС", "next": "B042"},
+        {"id": "diet", "label": "Погрешность в диете", "next": "B042"},
+        {"id": "stress", "label": "Стресс", "next": "B042"},
+        {"id": "critical", "label": "Критич. состояние (сепсис, шок, ЧМТ, ожоги)", "next": "B042"},
+        {"id": "blood_pain", "label": "Прожилки крови + боль длительно → полипозный синдром", "next": "B042"},
+        {"id": "pigment", "label": "Пигментные пятна → С-м Пейтца-Егерса", "next": "B042"},
+        {"id": "chemical", "label": "Приём хим. вещества → хим. ожог", "next": "B042"}
+      ]
+    },
+    "B042": {
+      "id": "B042",
+      "section": "branch_b_history",
+      "text": "H.pylori?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "yes", "label": "Да, подтверждён (биопсия / дых. тест / антиген) → эрадикация!", "next": "B043"},
+        {"id": "no", "label": "Нет / не исследовано → рекомендовать тестирование", "next": "B043"}
+      ]
+    },
+    "B043": {
+      "id": "B043",
+      "section": "branch_b_history",
+      "text": "Приём НПВС?",
+      "input_type": "yes_no",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "yes", "label": "Да (какой? доза? длительность? Риск ↑ при >10 мг/кг/сут ибупрофена >7 дней)", "next": "B044"},
+        {"id": "no", "label": "Нет", "next": "B044"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B044"}
+      ]
+    },
+    "B044": {
+      "id": "B044",
+      "section": "branch_b_history",
+      "text": "Антикоагулянты / антиагреганты?",
+      "input_type": "yes_no",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "yes", "label": "Да (эноксапарин, варфарин, апиксабан...) → контроль МНО!", "next": "B045"},
+        {"id": "no", "label": "Нет", "next": "B045"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B045"}
+      ]
+    },
+    "B045": {
+      "id": "B045",
+      "section": "branch_b_history",
+      "text": "ГКС?",
+      "input_type": "yes_no",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "yes", "label": "Да (↑ риск язв, особенно + НПВС)", "next": "B046"},
+        {"id": "no", "label": "Нет", "next": "B046"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B046"}
+      ]
+    },
+    "B046": {
+      "id": "B046",
+      "section": "branch_b_history",
+      "text": "ИПП длительно (>1 года)?",
+      "input_type": "yes_no",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "yes", "label": "Да → риск полипов фундальных желез", "next": "B050"},
+        {"id": "no", "label": "Нет", "next": "B050"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B050"}
+      ]
+    },
+    "B050": {
+      "id": "B050",
+      "section": "branch_b_history",
+      "text": "Цирроз печени?",
+      "input_type": "yes_no",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "yes", "label": "Да → Child-Pugh? METAVIR?", "next": "B051"},
+        {"id": "no", "label": "Нет", "next": "B052_hep"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B052_hep"}
+      ]
+    },
+    "B051": {
+      "id": "B051",
+      "section": "branch_b_history",
+      "text": "METAVIR фиброз / Child-Pugh",
+      "input_type": "info",
+      "description": "F0-F1: ВРВП маловероятно, F2: редко, F3: возможно, F4: 30-70% имеют ВРВП",
+      "next": "B052_hep"
+    },
+    "B052_hep": {
+      "id": "B052_hep",
+      "section": "branch_b_history",
+      "text": "Гепатит B/C? Аутоиммунный? Болезнь Вильсона?",
+      "input_type": "yes_no",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "yes", "label": "Любой Да → риск цирроза → ВРВП", "next": "B052_dcp"},
+        {"id": "no", "label": "Нет", "next": "B052_dcp"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B052_dcp"}
+      ]
+    },
+    "B052_dcp": {
+      "id": "B052_dcp",
+      "section": "branch_b_history",
+      "text": "ДЦП? Муковисцидоз?",
+      "input_type": "yes_no",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "yes", "label": "Да → фактор ГЭРБ", "next": "B052_family"},
+        {"id": "no", "label": "Нет", "next": "B052_family"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B052_family"}
+      ]
+    },
+    "B052_family": {
+      "id": "B052_family",
+      "section": "branch_b_history",
+      "text": "Семейный анамнез",
+      "input_type": "multi_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "crr", "label": "КРР → ювенильный полипоз, САП"},
+        {"id": "pancreas_breast", "label": "Рак поджелуд/молочной/яичников → Пейтца-Егерса"},
+        {"id": "duodenal_cancer", "label": "Рак ДПК → САП"},
+        {"id": "small_bowel_cancer", "label": "Рак тонкой кишки → юв. полипоз"},
+        {"id": "polyposis", "label": "Полипоз кишечника → все синдромы"}
+      ]
+    },
+    "B060": {
+      "id": "B060",
+      "section": "branch_b",
+      "text": "Лабораторные данные",
+      "input_type": "numeric",
+      "unknown_action": "skip_with_flag",
+      "fields": [
+        {"id": "hb", "label": "Hb (г/л)", "unit": "г/л", "range": [40, 200]},
+        {"id": "rbc", "label": "RBC (×10¹²/л)", "unit": "×10¹²/л", "range": [1.0, 7.0]},
+        {"id": "ht", "label": "Ht (%)", "unit": "%", "range": [10, 65]},
+        {"id": "plt", "label": "PLT (×10⁹/л)", "unit": "×10⁹/л", "range": [10, 800]},
+        {"id": "inr", "label": "INR", "unit": "", "range": [0.5, 10.0]},
+        {"id": "wbc", "label": "WBC (×10⁹/л)", "unit": "×10⁹/л", "range": [0.5, 50.0]}
+      ]
+    },
+    "B065": {
+      "id": "B065",
+      "section": "branch_b",
+      "text": "ЭГДС выполнена?",
+      "input_type": "yes_no",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "yes", "label": "Да", "next": "B067"},
+        {"id": "no", "label": "Нет", "next": "AWAITING_EGDS"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "AWAITING_EGDS"}
+      ]
+    },
+    "B067": {
+      "id": "B067",
+      "section": "branch_b",
+      "text": "Результат ЭГДС?",
+      "input_type": "single_choice",
+      "unknown_action": "branch_c",
+      "allow_multiple": true,
+      "options": [
+        {"id": "polyps", "label": "Полипы", "next": "B070"},
+        {"id": "vrvp", "label": "ВРВП", "next": "B080"},
+        {"id": "gastric_ulcer", "label": "Язва желудка", "next": "B090"},
+        {"id": "duodenal_ulcer", "label": "Язва ДПК", "next": "B091"},
+        {"id": "gastric_erosions", "label": "Эрозии желудка", "next": "B100"},
+        {"id": "esophageal_erosions", "label": "Эрозии пищевода", "next": "B110"},
+        {"id": "burn", "label": "Ожоговое поражение", "next": "B120"},
+        {"id": "normal", "label": "Норма", "next": "PENDING_DIFF"},
+        {"id": "multiple", "label": "Множественные находки", "next": "MULTIPLE_B"}
+      ]
+    },
+    "AWAITING_EGDS": {
+      "id": "AWAITING_EGDS",
+      "section": "branch_b",
+      "text": "Данные сохранены (жалобы, анамнез, лаб.). Рекомендация: выполнить ЭГДС. После ЭГДС вернуться к B067 (данные предзаполнены).",
+      "input_type": "info",
+      "is_pending": true,
+      "return_node": "B067"
+    },
+    "PENDING_DIFF": {
+      "id": "PENDING_DIFF",
+      "section": "branch_b",
+      "text": "ЭГДС без патологии. Дифф. диагностика: эозинофильный эзофагит, болезнь Крона, функциональная диспепсия, колоноскопия при анемии. → Биопсия + повторный прогон алгоритма.",
+      "input_type": "info",
+      "is_pending": true,
+      "return_node": "B067"
+    },
+    "MULTIPLE_B": {
+      "id": "MULTIPLE_B",
+      "section": "branch_b",
+      "text": "Множественные находки при ЭГДС. Выберите ВСЕ обнаруженные патологии.",
+      "input_type": "multi_choice",
+      "priority_order": ["vrvp", "gastric_ulcer", "duodenal_ulcer", "gastric_erosions", "esophageal_erosions", "burn", "polyps"],
+      "options": [
+        {"id": "vrvp", "label": "ВРВП", "priority": 1, "next": "B080"},
+        {"id": "gastric_ulcer", "label": "Язва желудка", "priority": 2, "next": "B090"},
+        {"id": "duodenal_ulcer", "label": "Язва ДПК", "priority": 3, "next": "B091"},
+        {"id": "gastric_erosions", "label": "Эрозии желудка", "priority": 4, "next": "B100"},
+        {"id": "esophageal_erosions", "label": "ЭРЭ", "priority": 5, "next": "B110"},
+        {"id": "burn", "label": "Ожоговое поражение", "priority": 6, "next": "B120"},
+        {"id": "polyps", "label": "Полипы", "priority": 7, "next": "B070"}
+      ]
+    },
+
+    "B070": {
+      "id": "B070",
+      "section": "branch_b_polyps",
+      "text": "Выявлены полипы",
+      "input_type": "info",
+      "next": "B071"
+    },
+    "B071": {
+      "id": "B071",
+      "section": "branch_b_polyps",
+      "text": "Локализация полипов?",
+      "input_type": "multi_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "LOC_1", "label": "Свод/тело желудка"},
+        {"id": "LOC_2", "label": "Антральный отдел"},
+        {"id": "LOC_3", "label": "ДПК"},
+        {"id": "LOC_4", "label": "Пищевод"}
+      ]
+    },
+    "B072": {
+      "id": "B072",
+      "section": "branch_b_polyps",
+      "text": "Количество полипов?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "QTY_1", "label": "Единичный (1)", "next": "B073"},
+        {"id": "QTY_2", "label": "Немного (2-9)", "next": "B073"},
+        {"id": "QTY_3", "label": "Множественные (10-99)", "next": "B073"},
+        {"id": "QTY_4", "label": "Массивное (100-1000+)", "next": "B073"}
+      ]
+    },
+    "B073": {
+      "id": "B073",
+      "section": "branch_b_polyps",
+      "text": "Основание полипа?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "BASE_1", "label": "Узкое (на ножке)", "next": "B074"},
+        {"id": "BASE_2", "label": "Широкое (сессильное)", "next": "B074"},
+        {"id": "BASE_3", "label": "Плоскоприподнятое", "next": "B074"}
+      ]
+    },
+    "B074": {
+      "id": "B074",
+      "section": "branch_b_polyps",
+      "text": "Внешний вид полипа?",
+      "input_type": "multi_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "APP_1", "label": "Ярко гиперемированные"},
+        {"id": "APP_2", "label": "С налётом фибрина"},
+        {"id": "APP_3", "label": "Белёсые, неизменённая слизистая"},
+        {"id": "APP_4", "label": "С эрозиями"},
+        {"id": "APP_5", "label": "Гладкая поверхность"},
+        {"id": "APP_6", "label": "Дольчатая поверхность"}
+      ]
+    },
+    "B075": {
+      "id": "B075",
+      "section": "branch_b_polyps",
+      "text": "Колоноскопия?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "COLO_1", "label": "Полипы немного", "next": "B076"},
+        {"id": "COLO_2", "label": "Полипы >100", "next": "B076"},
+        {"id": "COLO_3", "label": "Нет полипов", "next": "B076"},
+        {"id": "COLO_4", "label": "Не выполнена", "next": "B076"}
+      ]
+    },
+    "B076": {
+      "id": "B076",
+      "section": "branch_b_polyps",
+      "text": "Экстрагастральные признаки",
+      "input_type": "multi_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "pigment_lips", "label": "Пигментные пятна на губах"},
+        {"id": "osteomas", "label": "Остеомы челюсти"},
+        {"id": "dental", "label": "Аномалии зубов"},
+        {"id": "sebaceous_cysts", "label": "Кисты сальных желез"},
+        {"id": "chrpe", "label": "Пигмент на сетчатке (CHRPE)"},
+        {"id": "family_crr", "label": "Семья: КРР"},
+        {"id": "family_pancreas", "label": "Семья: рак поджелудочной"},
+        {"id": "family_polyposis", "label": "Семья: полипоз"}
+      ]
+    },
+    "B077": {
+      "id": "B077",
+      "section": "branch_b_polyps",
+      "text": "Автоматическая дифференциация полипов",
+      "input_type": "auto",
+      "unknown_action": "branch_c",
+      "rules": [
+        {
+          "id": "juvenile",
+          "conditions": "(BASE_1 OR BASE_2) AND (APP_1 OR APP_2) AND (LOC_1 OR LOC_3) AND (COLO_1 OR COLO_2) AND family_crr",
+          "next": "F01"
+        },
+        {
+          "id": "peutz_jeghers",
+          "conditions": "pigment_lips AND BASE_2 AND LOC_1 AND family_pancreas",
+          "next": "F02"
+        },
+        {
+          "id": "sap",
+          "conditions": "QTY_4 AND COLO_2 AND APP_3 AND (osteomas OR sebaceous_cysts)",
+          "next": "F03"
+        },
+        {
+          "id": "hyperplastic",
+          "conditions": "(QTY_1 OR QTY_2) AND BASE_2 AND (APP_3 OR APP_5) AND NOT ppi_long AND NOT family_polyposis",
+          "next": "F04"
+        },
+        {
+          "id": "fundic_gland",
+          "conditions": "(QTY_1 OR QTY_2) AND LOC_1_only AND (APP_3 OR APP_5) AND ppi_long",
+          "next": "F05"
+        },
+        {
+          "id": "brunner",
+          "conditions": "QTY_1 AND LOC_3_only AND BASE_2",
+          "next": "F06"
+        },
+        {
+          "id": "unclassified",
+          "conditions": "default",
+          "next": "F07"
+        }
+      ]
+    },
+
+    "B080": {
+      "id": "B080",
+      "section": "branch_b_vrvp",
+      "text": "ВРВП выявлено (профилактика)",
+      "input_type": "info",
+      "next": "B081"
+    },
+    "B081": {
+      "id": "B081",
+      "section": "branch_b_vrvp",
+      "text": "Степень ВРВП?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "no_varices", "label": "Нет вариксов, но есть признаки ПГ → ЭГДС 24-36 мес", "next": "F08"},
+        {"id": "grade_1", "label": "Grade 1 (<5мм) → ЭГДС через 12 мес, при стабильности 24 мес", "next": "F08"},
+        {"id": "grade_2_no_flags", "label": "Grade 2 (5-10мм) БЕЗ красных флагов, не лечены → ЭГДС 6 мес", "next": "F08"},
+        {"id": "grade_2_flags_or_3", "label": "Grade 2 С красными флагами / множественные / Grade 3 (>10мм) → ⚡ Лигирование → ЭГДС 1-3 мес", "next": "F08"},
+        {"id": "secondary", "label": "Вторичная профилактика (после кровотечения) → лигирование каждые 2-4 нед", "next": "F08"}
+      ]
+    },
+    "B082": {
+      "id": "B082",
+      "section": "branch_b_vrvp",
+      "text": "Тип варикоза?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "gov", "label": "GOV1/GOV2", "next": "B081"},
+        {"id": "igv", "label": "IGV1/IGV2 (выше риск кровотечения!)", "next": "B081"}
+      ]
+    },
+    "B083": {
+      "id": "B083",
+      "section": "branch_b_vrvp",
+      "text": "Портальная гипертензивная гастропатия?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "mild", "label": "Лёгкая: мозаичный рисунок слизистой → наблюдение, коррекция ЖДА, β-блокаторы индивидуально"},
+        {"id": "severe", "label": "Тяжёлая: вишнёвые пятна, кровоточивость → коррекция ЖДА, β-блокаторы индивидуально"},
+        {"id": "no", "label": "Нет", "next": "B081"}
+      ]
+    },
+    "B084": {
+      "id": "B084",
+      "section": "branch_b_vrvp",
+      "text": "Красные знаки? (гемокисты, вишнёвые пятна, варикоз-на-варикозе)",
+      "input_type": "yes_no",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "yes", "label": "Есть → ↑↑ риск", "next": "B081"},
+        {"id": "no", "label": "Нет", "next": "B081"},
+        {"id": "unknown", "label": "Данные отсутствуют", "next": "B081"}
+      ]
+    },
+
+    "B090": {
+      "id": "B090",
+      "section": "branch_b_ulcers",
+      "text": "Язва желудка (ЯБЖ) — классификации",
+      "input_type": "info",
+      "next": "B090_sakita"
+    },
+    "B090_sakita": {
+      "id": "B090_sakita",
+      "section": "branch_b_ulcers",
+      "text": "Стадия Sakita-Miwa?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "A1", "label": "A1: активная, фибрин, вал", "next": "B090_forrest"},
+        {"id": "A2", "label": "A2: уменьшается", "next": "B090_forrest"},
+        {"id": "H1H2", "label": "H1/H2: заживление → продолжить ИПП", "next": "F10"},
+        {"id": "S1S2", "label": "S1/S2: рубец → контроль 6-12 мес", "next": "F10"}
+      ]
+    },
+    "B090_forrest": {
+      "id": "B090_forrest",
+      "section": "branch_b_ulcers",
+      "text": "Forrest?",
+      "input_type": "single_choice",
+      "unknown_action": "branch_c",
+      "options": [
+        {"id": "Ia_IIa", "label": "Ia-IIa ⚡ Кровотечение → экстренный гемостаз", "next": "F10"},
+        {"id": "IIb", "label": "IIb: тромб → удаление + гемостаз или наблюдение", "next": "F10"},
+        {"id": "IIc_III", "label": "IIc-III: нет стигм → консервативно (ИПП 4-8 нед)", "next": "F10"}
+      ]
+    },
+    "B091": {
+      "id": "B091",
+      "section": "branch_b_ulcers",
+      "text": "Язва ДПК (ЯБ ДПК)",
+      "input_type": "info",
+      "next": "B091_size"
+    },
+    "B091_size": {
+      "id": "B091_size",
+      "section": "branch_b_ulcers",
+      "text": "Размер язвы ДПК?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "small", "label": "<0.5 см (малая)", "next": "B091_forrest"},
+        {"id": "medium", "label": "0.5-2 см (средняя)", "next": "B091_forrest"},
+        {"id": "giant", "label": "⚡ >2 см (гигантская!)", "next": "B091_forrest"}
+      ]
+    },
+    "B091_forrest": {
+      "id": "B091_forrest",
+      "section": "branch_b_ulcers",
+      "text": "Forrest?",
+      "input_type": "single_choice",
+      "unknown_action": "branch_c",
+      "options": [
+        {"id": "Ia_IIa", "label": "Ia-IIa → ⚡ Эндоскопический гемостаз", "next": "F11"},
+        {"id": "IIb_III", "label": "IIb-III → Консервативно: ИПП, биопсия на H.pylori", "next": "F11"}
+      ]
+    },
+
+    "B100": {
+      "id": "B100",
+      "section": "branch_b_erosions",
+      "text": "Выявлены эрозии",
+      "input_type": "info",
+      "next": "B100a"
+    },
+    "B100a": {
+      "id": "B100a",
+      "section": "branch_b_erosions",
+      "text": "Алгоритм автодифференциации эрозий. Шаг 1: Локализация?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "distal_esophagus", "label": "Дистальный отдел пищевода (над Z-линией)", "next": "F13"},
+        {"id": "antral", "label": "Антральный отдел желудка", "next": "B100a_hp"},
+        {"id": "corpus_fundus", "label": "Тело / свод (фундальный отдел)", "next": "B100a_risk"},
+        {"id": "diffuse", "label": "Диффузно (все отделы)", "next": "B100a_risk"}
+      ]
+    },
+    "B100a_hp": {
+      "id": "B100a_hp",
+      "section": "branch_b_erosions",
+      "text": "H.pylori? (антральные эрозии)",
+      "input_type": "single_choice",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "yes", "label": "H.pylori = ДА → F09: эрозивный гастрит (H.pylori-ассоциированный)", "next": "F09"},
+        {"id": "no_nsaids", "label": "H.pylori = НЕТ + НПВС = ДА → F12: НПВС-гастропатия", "next": "F12"},
+        {"id": "no_none", "label": "H.pylori = НЕТ + НПВС = НЕТ → F09: эрозивный гастрит (идиопатический)", "next": "F09"}
+      ]
+    },
+    "B100a_risk": {
+      "id": "B100a_risk",
+      "section": "branch_b_erosions",
+      "text": "Факторы риска? (тело/свод/диффузные эрозии)",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "nsaids", "label": "НПВС = ДА → F12: НПВС-гастропатия", "next": "F12"},
+        {"id": "icu", "label": "ОРИТ / критич. сост. = ДА → F13a: стресс-эрозии", "next": "F13a"},
+        {"id": "both", "label": "НПВС + ОРИТ = оба ДА → F12 (приоритет) + стресс-фактор", "next": "F12"},
+        {"id": "none", "label": "Ни одного фактора → биопсия обязательна, F09 предварительно", "next": "F09"}
+      ]
+    },
+
+    "B110": {
+      "id": "B110",
+      "section": "branch_b_ere",
+      "text": "Эрозии дистального отдела пищевода (над Z-линией)",
+      "input_type": "info",
+      "next": "B110_la"
+    },
+    "B110_la": {
+      "id": "B110_la",
+      "section": "branch_b_ere",
+      "text": "Классификация Los Angeles?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "LA_A", "label": "LA A: ≥1 эрозия ≤5мм, не сливающиеся → лёгкая", "next": "B110_sev"},
+        {"id": "LA_B", "label": "LA B: ≥1 эрозия >5мм, не сливающиеся → лёгкая/средняя", "next": "B110_sev"},
+        {"id": "LA_C", "label": "LA C: сливающиеся эрозии <75% окружности → средняя/тяжёлая", "next": "B110_sev"},
+        {"id": "LA_D", "label": "LA D: эрозии ≥75% окружности → тяжёлая", "next": "B110_sev"}
+      ]
+    },
+    "B110_sev": {
+      "id": "B110_sev",
+      "section": "branch_b_ere",
+      "text": "Тяжесть пациента?",
+      "input_type": "single_choice",
+      "unknown_action": "safe_default",
+      "options": [
+        {"id": "mild", "label": "Лёгкая: Hb>100, LA A-B, нет кровотечения → амбулаторно: ИПП 8-12 нед", "next": "F13"},
+        {"id": "moderate", "label": "Средняя: Hb 80-100, LA C, дисфагия → госпитализация: ИПП, контроль Hb, бужирование?", "next": "F13"},
+        {"id": "severe", "label": "Тяжёлая: Hb<80, LA D, активное кровотечение → экстренно: ЭГДС <12ч, гемостаз, трансфузия", "next": "F13"}
+      ]
+    },
+
+    "B120": {
+      "id": "B120",
+      "section": "branch_b_burn",
+      "text": "Химический ожог пищевода / желудка",
+      "input_type": "info",
+      "next": "B120_type"
+    },
+    "B120_type": {
+      "id": "B120_type",
+      "section": "branch_b_burn",
+      "text": "Тип вещества?",
+      "input_type": "single_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "acid", "label": "Кислота (серная, соляная, уксусная) → коагуляционный некроз, чаще желудок", "next": "B120_zargar"},
+        {"id": "alkali", "label": "Щёлочь (NaOH, KOH) → колликвационный некроз, чаще пищевод, риск перфорации", "next": "B120_zargar"},
+        {"id": "battery", "label": "Батарейка → электрохимический ожог, извлечение <2 часов!", "next": "B120_zargar"}
+      ]
+    },
+    "B120_zargar": {
+      "id": "B120_zargar",
+      "section": "branch_b_burn",
+      "text": "Классификация Zargar?",
+      "input_type": "single_choice",
+      "unknown_action": "branch_c",
+      "options": [
+        {"id": "0", "label": "0: Норма → наблюдение, стриктура 0%", "next": "F14"},
+        {"id": "I", "label": "I: Гиперемия, отёк → наблюдение 24-48ч, стриктура 0%", "next": "F14"},
+        {"id": "IIA", "label": "IIA: Поверхн. эрозии, фибрин → ИПП, наблюдение, стриктура 0-15%", "next": "F14"},
+        {"id": "IIB", "label": "IIB: Глубокие эрозии, язвы → ИПП, преднизолон 1-2 мг/кг/сут, бужирование 5-7 день, стриктура 15-75%", "next": "F14"},
+        {"id": "IIIA", "label": "IIIA: Очаговый некроз → интенсивная терапия, хирург, стриктура 75-100%", "next": "F14"},
+        {"id": "IIIB", "label": "IIIB: Обширный некроз → хирург! Риск перфорации! Стриктура ~100%", "next": "F14"},
+        {"id": "IV", "label": "IV: Перфорация → ⚡ ЭКСТРЕННАЯ ОПЕРАЦИЯ", "next": "F14"}
+      ]
+    },
+
+    "C001": {
+      "id": "C001",
+      "section": "branch_c",
+      "text": "Пол, возраст пациента",
+      "input_type": "info",
+      "description": "0-1 год: аллергия на БКМ, НЭК; 1-5 лет: инородные тела, полипы; 5-12: полипозы, ЯБ, ВРВП; 12-18: ЯБ, НПВС, ВРВП, ЭРЭ",
+      "next": "C010"
+    },
+    "C010": {
+      "id": "C010",
+      "section": "branch_c",
+      "text": "Жалобы",
+      "input_type": "multi_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "pain", "label": "Боль?"},
+        {"id": "vomiting", "label": "Рвота?"},
+        {"id": "heartburn", "label": "Изжога?"},
+        {"id": "stool", "label": "Изменения стула?"},
+        {"id": "ascites", "label": "Асцит?"},
+        {"id": "jaundice", "label": "Желтуха?"},
+        {"id": "pigment", "label": "Пигментные пятна?"},
+        {"id": "dysphagia", "label": "Дисфагия?"},
+        {"id": "weight_loss", "label": "Потеря веса?"}
+      ]
+    },
+    "C015": {
+      "id": "C015",
+      "section": "branch_c",
+      "text": "Дополнительный анамнез",
+      "input_type": "multi_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "h_pylori_yes", "label": "H.pylori — да"},
+        {"id": "h_pylori_no", "label": "H.pylori — нет"},
+        {"id": "h_pylori_unknown", "label": "H.pylori — не исследовано"},
+        {"id": "nsaids_yes", "label": "Приём НПВС — да"},
+        {"id": "nsaids_no", "label": "Приём НПВС — нет"},
+        {"id": "family_crr", "label": "Семейный анамнез: КРР"},
+        {"id": "family_polyposis", "label": "Семейный анамнез: полипоз"},
+        {"id": "family_oncology", "label": "Семейный анамнез: онкология"},
+        {"id": "cirrhosis_yes", "label": "Цирроз / гепатит — да"},
+        {"id": "cirrhosis_no", "label": "Цирроз / гепатит — нет"},
+        {"id": "anticoagulants", "label": "Антикоагулянты / ГКС — да"}
+      ]
+    },
+    "C020": {
+      "id": "C020",
+      "section": "branch_c",
+      "text": "Тяжесть пациента: сознание, АД, ЧСС, ЧД, цвет кожи, симптом белого пятна",
+      "input_type": "multi_choice",
+      "unknown_action": "skip_with_flag",
+      "options": [
+        {"id": "consciousness_clear", "label": "Сознание ясное"},
+        {"id": "consciousness_impaired", "label": "Сознание нарушено"},
+        {"id": "bp_normal", "label": "АД в норме"},
+        {"id": "bp_low", "label": "АД снижено"},
+        {"id": "hr_normal", "label": "ЧСС в норме"},
+        {"id": "hr_elevated", "label": "ЧСС повышена"},
+        {"id": "skin_normal", "label": "Кожа обычного цвета"},
+        {"id": "skin_pale", "label": "Кожа бледная"}
+      ]
+    },
+    "C030": {
+      "id": "C030",
+      "section": "branch_c",
+      "text": "Лабораторные данные",
+      "input_type": "numeric",
+      "unknown_action": "skip_with_flag",
+      "fields": [
+        {"id": "hb", "label": "Hb (г/л)", "unit": "г/л", "range": [40, 200]},
+        {"id": "rbc", "label": "RBC (×10¹²/л)", "unit": "×10¹²/л", "range": [1.0, 7.0]},
+        {"id": "ht", "label": "Ht (%)", "unit": "%", "range": [10, 65]},
+        {"id": "plt", "label": "PLT (×10⁹/л)", "unit": "×10⁹/л", "range": [10, 800]},
+        {"id": "inr", "label": "INR", "unit": "", "range": [0.5, 10.0]},
+        {"id": "wbc", "label": "WBC (×10⁹/л)", "unit": "×10⁹/л", "range": [0.5, 50.0]}
+      ]
+    },
+    "C040": {
+      "id": "C040",
+      "section": "branch_c",
+      "text": "Автоматическая маршрутизация по правилам C-R1 → C-R8",
+      "input_type": "auto",
+      "unknown_action": null,
+      "rules": [
+        {"id": "C_R1", "label": "ЭКСТРЕННЫЙ: рвота кровью / мелена / шок / Hb<80", "priority": 1, "next": "A001"},
+        {"id": "C_R3", "label": "ЭКСТРЕННЫЙ: дисфагия + приём хим. вещества", "priority": 2, "next": "A006"},
+        {"id": "C_R2", "label": "ВЫСОКИЙ: асцит + желтуха + тромбоцитопения (≥2)", "priority": 3, "next": "B080"},
+        {"id": "C_R4", "label": "СРЕДНИЙ: пигм. пятна на губах ИЛИ прожилки крови + семейный полипоз", "priority": 4, "next": "B070"},
+        {"id": "C_R5", "label": "СРЕДНИЙ: изжога + загрудинная боль + связь с положением", "priority": 5, "next": "B110"},
+        {"id": "C_R6", "label": "СРЕДНИЙ: эпигастр. боль + связь с едой + H.pylori/НПВС", "priority": 6, "next": "B090"},
+        {"id": "C_R7", "label": "СРЕДНИЙ: приём НПВС + боль, нет кровотечения", "priority": 7, "next": "B100"},
+        {"id": "C_R8", "label": "НИЗКИЙ: ни одно правило не сработало → дообследование", "priority": 8, "next": "AWAITING_WORKUP"}
+      ],
+      "data_transfer": {
+        "enabled": true,
+        "description": "При маршрутизации из C в A или B все собранные данные (C001-C030 + C015) переносятся и предзаполняют соответствующие поля. Бот не переспрашивает то, что уже известно."
+      }
+    },
+    "AWAITING_WORKUP": {
+      "id": "AWAITING_WORKUP",
+      "section": "branch_c",
+      "text": "Данные сохранены. Необходимо дообследование: 1) ЭГДС с биопсией, 2) ОАК, коагулограмма, биохимия, 3) Кал на скрытую кровь, H.pylori, 4) УЗИ брюшной полости, 5) Колоноскопия при показаниях. После результатов вернуться к C040.",
+      "input_type": "info",
+      "is_pending": true,
+      "return_node": "C040"
+    }
+  },
+
+  "finals": {
+    "F01": {
+      "id": "F01",
+      "diagnosis": "Ювенильный полипоз",
+      "endo_picture": "Узкое или широкое основание, гиперемия, фибрин, эрозии. Количество меньше чем при СПЕ.",
+      "equipment": ["Видеогастроскоп", "Полипэктомическая петля", "Ловушка", "Клипсы"],
+      "algorithm": "Осмотр → полипэктомия крупных (>10мм) → гемостаз клипсой → морфология → генетика",
+      "routing": "Гастроэнтеролог + генетик",
+      "followup": "ЭГДС + колоноскопия 1-3 года"
+    },
+    "F02": {
+      "id": "F02",
+      "diagnosis": "Синдром Пейтца-Егерса",
+      "endo_picture": "Широкое основание 5-7мм, свод/тело. Пигментные пятна на губах (часто, но отсутствие не исключает!).",
+      "equipment": ["Видеогастроскоп", "Полипэктомическая петля", "Ловушка", "Клипсы", "АПК"],
+      "algorithm": "Осмотр → биопсия мелких → полипэктомия >10-15мм → гемостаз → документирование всех → генетика",
+      "routing": "Гастро + генетик + онколог",
+      "followup": "ЭГДС+колоно+капсула 2-3 года с 8 лет"
+    },
+    "F03": {
+      "id": "F03",
+      "diagnosis": "Семейный аденоматозный полипоз (САП)",
+      "endo_picture": "Белёсые мелкие 5-7мм множественные. Кишечник: 100-1000+ полипов. В ДПК по вершинам складок. Остеомы, кисты (Гарднер).",
+      "equipment": ["Видеогастроскоп", "Полипэктомическая петля", "Ловушка", "Набор для биопсии"],
+      "algorithm": "Осмотр + подсчёт → биопсия 3-5 участков → генетика → решение о профилакт. колэктомии",
+      "routing": "Гастро + колопроктолог + генетик",
+      "followup": "Колоноскопия ежегодно с 10-12 лет"
+    },
+    "F04": {
+      "id": "F04",
+      "diagnosis": "Гиперпластический полип",
+      "endo_picture": "Единичные мелкие <5мм, белёсые, гладкие, широкое основание.",
+      "equipment": ["Видеогастроскоп", "Набор для биопсии", "Петля (при >10мм)"],
+      "algorithm": "Осмотр → биопсия → полипэктомия если >10мм → гемостаз клипсой → морфология",
+      "routing": "Гастроэнтеролог",
+      "followup": "ЭГДС 6-12 мес"
+    },
+    "F05": {
+      "id": "F05",
+      "diagnosis": "Полип фундальных желез",
+      "endo_picture": "Мелкие белёсые, только свод/тело. Ассоциация с длительным ИПП.",
+      "equipment": ["Видеогастроскоп", "Набор для биопсии"],
+      "algorithm": "Осмотр → биопсия → отмена ИПП → контрольная ЭГДС (могут регрессировать)",
+      "routing": "Гастроэнтеролог",
+      "followup": "ЭГДС 1-2 года"
+    },
+    "F06": {
+      "id": "F06",
+      "diagnosis": "Полип Бруннера",
+      "endo_picture": "Единичный, луковица ДПК, широкое основание, неизменённая слизистая.",
+      "equipment": ["Видеогастроскоп", "Набор для биопсии", "Петля (при >10-20мм)"],
+      "algorithm": "Осмотр → биопсия → полипэктомия если >10-20мм → гемостаз → морфология",
+      "routing": "Гастроэнтеролог",
+      "followup": "ЭГДС через 12 мес"
+    },
+    "F07": {
+      "id": "F07",
+      "diagnosis": "Неклассифицированный полип",
+      "endo_picture": "Не соответствует критериям F01-F06.",
+      "equipment": ["Видеогастроскоп", "Набор для биопсии"],
+      "algorithm": "Обязательная биопсия + гистология → по результатам → вернуться к F01-F06",
+      "routing": "Гастроэнтеролог → морфолог",
+      "followup": "По результатам гистологии"
+    },
+    "F08": {
+      "id": "F08",
+      "diagnosis": "ВРВП (варикозное расширение вен пищевода)",
+      "endo_picture": "Вены 1-3 ст, красные знаки (гемокисты, вишнёвые пятна), GOV/IGV.",
+      "equipment": ["Видеогастроскоп ≥3.2мм", "Мультибандовый лигатор", "АПК", "Отсос", "Зонд Блэкмора (резерв)"],
+      "algorithm": "Стабилизация → октреотид 1мкг/кг (макс 50мкг) → цефалосп. III 5-7д (только при цирротич. ПГ!) → ЭГДС ≤12ч → лигирование → при неэфф: зонд Блэкмора (≤4ч) → Пациора/Сигиура",
+      "routing": "Гастро + гепатолог + хирург",
+      "followup": "ЭГДС 2-4 нед, далее 1-3 мес до эрадикации"
+    },
+    "F09": {
+      "id": "F09",
+      "diagnosis": "Эрозивный гастрит",
+      "endo_picture": "Плоские/геморрагические эрозии ≤5мм, чаще антральный отдел.",
+      "equipment": ["Видеогастроскоп", "Набор для биопсии", "Инъекционная игла"],
+      "algorithm": "Осмотр → биопсия (H.pylori) → инъекционный гемостаз при активном к/т → документирование → ИПП 4-8 нед → эрадикация H.pylori",
+      "routing": "Гастроэнтеролог",
+      "followup": "ЭГДС 4-8 нед"
+    },
+    "F10": {
+      "id": "F10",
+      "diagnosis": "Язвенная болезнь желудка (ЯБЖ)",
+      "endo_picture": "Дефект за мышечную пластинку. Стадия Sakita-Miwa, оценка Forrest. Биопсия краёв обязательна!",
+      "equipment": ["Видеогастроскоп", "Инъекционная игла", "Клипсы", "АПК/биполяр", "Набор для биопсии"],
+      "algorithm": "Осмотр → оценка Forrest → при Ia-IIa: инъекция адреналина 1:10000 + клипирование (комбинированный) → биопсия краёв → ИПП 4-8 нед → эрадикация H.pylori",
+      "routing": "Гастро, хирург при осложнениях",
+      "followup": "ЭГДС 4-8 нед"
+    },
+    "F11": {
+      "id": "F11",
+      "diagnosis": "Язвенная болезнь ДПК (ЯБ ДПК)",
+      "endo_picture": "Луковица ДПК, дефект слизистой.",
+      "equipment": ["Видеогастроскоп", "Инъекционная игла", "Клипсы", "Набор для биопсии"],
+      "algorithm": "Осмотр → оценка Forrest → при Ia-IIa: инъекция + клипирование → биопсия на H.pylori → ИПП → эрадикация H.pylori",
+      "routing": "Гастро, хирург при осложнениях",
+      "followup": "ЭГДС 4-8 нед"
+    },
+    "F12": {
+      "id": "F12",
+      "diagnosis": "НПВС-гастропатия",
+      "endo_picture": "Тело/свод, множественные эрозии, 'кровавая роса', нет воспалит. вала.",
+      "equipment": ["Видеогастроскоп", "Набор для биопсии", "Инъекционная игла"],
+      "algorithm": "Осмотр → биопсия → гемостаз при активном к/т → ОТМЕНА НПВС! → замена на ЦОГ-2 → ИПП",
+      "routing": "Гастро + ревматолог",
+      "followup": "ЭГДС 4-8 нед после отмены"
+    },
+    "F13": {
+      "id": "F13",
+      "diagnosis": "Эрозивный рефлюкс-эзофагит (ЭРЭ)",
+      "endo_picture": "Дист. пищевод, Los Angeles A-D.",
+      "equipment": ["Видеогастроскоп", "Набор для биопсии", "Бужи (при стриктурах)"],
+      "algorithm": "Осмотр → классификация Los Angeles → биопсия (исключить эозинофильный эзофагит!) → ИПП 8-12 нед + образ жизни → при стриктурах: бужирование → при неэфф: фундопликация",
+      "routing": "Гастроэнтеролог",
+      "followup": "ЭГДС 8-12 нед"
+    },
+    "F13a": {
+      "id": "F13a",
+      "diagnosis": "Стресс-эрозии",
+      "endo_picture": "Тело/свод, множественные эрозии, геморрагические пятна, острые язвы. Причины: сепсис, шок, ЧМТ, ожоги, ИВЛ>48ч.",
+      "equipment": ["Видеогастроскоп", "Инъекционная игла", "АПК", "Клипсы"],
+      "algorithm": "Осмотр → оценка кровотечения → при активном: инъекция + АПК/клипирование → лечение основного состояния! → ИПП профилактика",
+      "routing": "Реаниматолог + гастро",
+      "followup": "ЭГДС при ухудшении"
+    },
+    "F14": {
+      "id": "F14",
+      "diagnosis": "Химический ожог",
+      "endo_picture": "Оценка по Zargar 0-IV. НЕ вызывать рвоту! НЕ промывать!",
+      "equipment": ["Видеогастроскоп", "Бужи", "Набор для биопсии"],
+      "algorithm": "ЭГДС 6-24ч → Zargar → при IIB-IIIA: преднизолон 1-2 мг/кг/сут 2-3 нед → бужирование с 5-7 дня → контроль ЭГДС",
+      "routing": "Токсиколог + хирург + гастро + ЛОР",
+      "followup": "Повт. ЭГДС 2-3 нед, далее 1-3 года. Риск рака пищевода через 20-40 лет!"
+    },
+    "F15": {
+      "id": "F15",
+      "diagnosis": "Синдром Мэллори-Вейсса",
+      "endo_picture": "Линейный разрыв слизистой в области кардии. Триггеры: рвота, надсадный кашель, травма живота, физ. нагрузки.",
+      "equipment": ["Видеогастроскоп", "Клипсы", "Инъекционная игла"],
+      "algorithm": "Осмотр → оценка активности → при активном к/т: клипирование + инъекция → при остановившемся: ИПП + наблюдение → контроль гемодинамики",
+      "routing": "Гастроэнтеролог",
+      "followup": "ЭГДС 4-8 нед"
+    }
+  },
+
+  "classifications": {
+    "forrest": {
+      "name": "Классификация Forrest",
+      "grades": [
+        {"id": "Ia", "label": "Струйное артериальное кровотечение", "hemostasis": true, "risk": "high"},
+        {"id": "Ib", "label": "Диффузное кровотечение", "hemostasis": true, "risk": "high"},
+        {"id": "IIa", "label": "Видимый тромбированный сосуд", "hemostasis": true, "risk": "high"},
+        {"id": "IIb", "label": "Фиксированный тромб", "hemostasis": "optional", "risk": "medium"},
+        {"id": "IIc", "label": "Плоское пигментное пятно (гематин)", "hemostasis": false, "risk": "low"},
+        {"id": "III", "label": "Чистое дно язвы", "hemostasis": false, "risk": "low"}
+      ]
+    },
+    "child_pugh": {
+      "name": "Классификация Child-Pugh",
+      "parameters": [
+        {"name": "Билирубин (мкмоль/л)", "1_point": "<34", "2_points": "34-51", "3_points": ">51"},
+        {"name": "Альбумин (г/л)", "1_point": ">35", "2_points": "28-35", "3_points": "<28"},
+        {"name": "МНО", "1_point": "<1.7", "2_points": "1.7-2.3", "3_points": ">2.3"},
+        {"name": "Асцит", "1_point": "Нет", "2_points": "Умеренный", "3_points": "Напряжённый"},
+        {"name": "Энцефалопатия", "1_point": "Нет", "2_points": "I-II ст.", "3_points": "III-IV ст."}
+      ],
+      "classes": [
+        {"class": "A", "score": "5-6", "description": "Компенсированный", "bleeding_risk": "~5%/год", "rebleeding_risk": "~30%"},
+        {"class": "B", "score": "7-9", "description": "Субкомпенсированный", "bleeding_risk": "~10-15%/год", "rebleeding_risk": "~50%"},
+        {"class": "C", "score": "10-15", "description": "Декомпенсированный", "bleeding_risk": "~15-20%/год", "rebleeding_risk": "~70%"}
+      ]
+    },
+    "zargar": {
+      "name": "Классификация Zargar (химический ожог)",
+      "grades": [
+        {"id": "0", "description": "Норма", "stricture_risk": "0%"},
+        {"id": "I", "description": "Гиперемия, отёк", "stricture_risk": "0%"},
+        {"id": "IIA", "description": "Поверхностные эрозии, фибрин, контактное кровотечение", "stricture_risk": "0-15%"},
+        {"id": "IIB", "description": "Глубокие эрозии, язвы, очаговый некроз", "stricture_risk": "15-75%"},
+        {"id": "IIIA", "description": "Очаговый некроз слизистой + подслизистой", "stricture_risk": "75-100%"},
+        {"id": "IIIB", "description": "Обширный некроз всей толщи стенки", "stricture_risk": "~100%"},
+        {"id": "IV", "description": "Перфорация", "stricture_risk": "N/A"}
+      ]
+    },
+    "los_angeles": {
+      "name": "Классификация Los Angeles (ЭРЭ)",
+      "grades": [
+        {"id": "A", "description": "≥1 эрозия ≤5мм, не сливающиеся", "severity": "лёгкая"},
+        {"id": "B", "description": "≥1 эрозия >5мм, не сливающиеся", "severity": "лёгкая/средняя"},
+        {"id": "C", "description": "Сливающиеся эрозии <75% окружности", "severity": "средняя/тяжёлая"},
+        {"id": "D", "description": "Эрозии ≥75% окружности или осложнённые", "severity": "тяжёлая"}
+      ]
+    },
+    "sakita_miwa": {
+      "name": "Классификация Sakita-Miwa (стадии язвы)",
+      "stages": [
+        {"id": "A1", "description": "Активная: фибрин, конвергенция складок, воспалительный вал"},
+        {"id": "A2", "description": "Активная уменьшающаяся"},
+        {"id": "H1", "description": "Заживление начальное: уменьшение фибрина, грануляции"},
+        {"id": "H2", "description": "Заживление позднее: практически закрыта"},
+        {"id": "S1", "description": "Рубец красный (свежий)"},
+        {"id": "S2", "description": "Рубец белый (зрелый)"}
+      ]
+    },
+    "sarin": {
+      "name": "Классификация Sarin (варикоз желудка)",
+      "types": [
+        {"id": "GOV1", "description": "Гастроэзофагеальные — продолжение пищеводных вдоль малой кривизны"},
+        {"id": "GOV2", "description": "Гастроэзофагеальные — продолжение вдоль свода"},
+        {"id": "IGV1", "description": "Изолированные желудочные — свод (повышенный риск!)"},
+        {"id": "IGV2", "description": "Изолированные желудочные — любая другая локализация (повышенный риск!)"}
+      ]
+    },
+    "metavir": {
+      "name": "Шкала METAVIR (фиброз печени)",
+      "stages": [
+        {"id": "F0", "description": "Нет фиброза", "vrvp_probability": "маловероятно"},
+        {"id": "F1", "description": "Портальный фиброз без септ", "vrvp_probability": "маловероятно"},
+        {"id": "F2", "description": "Портальный фиброз + немногие септы", "vrvp_probability": "редко"},
+        {"id": "F3", "description": "Множественные септы без цирроза", "vrvp_probability": "возможно"},
+        {"id": "F4", "description": "Цирроз", "vrvp_probability": "30-70%"}
+      ]
+    }
+  },
+
+  "edges": [
+    {"from": "N000", "to": "N001", "label": "Начало"},
+    {"from": "A002", "to": "A005", "label": "После стабилизации"},
+    {"from": "A003", "to": "A005", "label": "После стабилизации"},
+    {"from": "A004", "to": "A005", "label": "После наблюдения"},
+    {"from": "IT_E", "to": "IT_FIN", "label": "После извлечения"},
+    {"from": "IT_U", "to": "IT_FIN", "label": "После извлечения"},
+    {"from": "IT_D", "to": "IT_FIN", "label": "После извлечения"},
+    {"from": "A022", "to": "A023", "label": "ЭГДС выполнена"},
+    {"from": "A040", "to": "A050", "label": "Далее"},
+    {"from": "A050", "to": "A060", "label": "ЭГДС"},
+    {"from": "B010", "to": "B020", "label": "Далее"},
+    {"from": "B030a", "to": "B031", "label": "Далее"},
+    {"from": "B036", "to": "B040", "label": "→ Анамнез"},
+    {"from": "B046", "to": "B050", "label": "→ Сопутствующие"},
+    {"from": "B052_family", "to": "B060", "label": "→ Лаб. данные"},
+    {"from": "B060", "to": "B065", "label": "Далее"},
+    {"from": "B071", "to": "B072", "label": "Далее"},
+    {"from": "B074", "to": "B075", "label": "Далее"},
+    {"from": "B076", "to": "B077", "label": "→ Автодифференциация"},
+    {"from": "C001", "to": "C010", "label": "Далее"},
+    {"from": "C010", "to": "C015", "label": "Далее"},
+    {"from": "C015", "to": "C020", "label": "Далее"},
+    {"from": "C020", "to": "C030", "label": "Далее"},
+    {"from": "C030", "to": "C040", "label": "→ Маршрутизация"}
+  ]
+}
