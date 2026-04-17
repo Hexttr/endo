@@ -83,6 +83,21 @@ function TreeViewInner() {
   const initDone = useRef(false)
   const paneRef = useRef(null)
   const [rfReady, setRfReady] = useState(false)
+  // Force "fit all" on genuine page reloads (F5 / Ctrl+R). SPA navigation
+  // within the admin keeps the saved viewport so returning from an editor
+  // lands the user exactly where they were.
+  const [isPageReload] = useState(() => {
+    try {
+      const entries = performance.getEntriesByType('navigation')
+      const type = entries && entries[0] && entries[0].type
+      const legacy = performance.navigation && performance.navigation.type === 1
+      const reload = type === 'reload' || legacy
+      if (reload) {
+        sessionStorage.removeItem(VIEWPORT_KEY)
+      }
+      return reload
+    } catch { return false }
+  })
   // Each of these flips true once the corresponding fetch RESOLVES (even when
   // it returns an empty array). We wait for ALL three before running the
   // initial viewport logic, otherwise dagre can re-layout on a partial graph
@@ -430,20 +445,11 @@ function TreeViewInner() {
     return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad }
   }, [laidOutNodes, getNode])
 
-  // Dynamic minimum zoom: the user should never be able to zoom out so far
-  // that the graph visually vanishes. Below this level ReactFlow refuses
-  // to zoom out any further.
-  //
-  // We explicitly do NOT use translateExtent — it interferes with cursor-
-  // anchored wheel zoom and with free panning once the viewport is larger
-  // than the extent, which makes the graph feel "stuck".
-  //
-  // Important: the factor MUST be strictly below the zoom fitAllNodes
-  // produces (fit × 0.7 = 1 - 2·padding, padding = 0.15). Otherwise
-  // ReactFlow clamps the initial fit up to minZoom while the translate
-  // was computed for the smaller zoom — the graph shifts off-screen.
-  // 0.5 leaves a comfortable margin and still guarantees that at max
-  // zoom-out the graph occupies at least 50 % of the pane.
+  // Dynamic minimum zoom = the zoom at which the graph bounding box fills
+  // the pane exactly. Any zoom level below that would expose empty space
+  // around the graph, which combined with translateExtent below would make
+  // ReactFlow start clamping translate in weird ways. So we simply forbid
+  // it — you cannot zoom out past "everything is visible".
   const [dynMinZoom, setDynMinZoom] = useState(0.02)
   useEffect(() => {
     if (!graphBounds) return
@@ -454,12 +460,33 @@ function TreeViewInner() {
       const gh = graphBounds.maxY - graphBounds.minY
       if (gw <= 0 || gh <= 0) return
       const fit = Math.min(pane.width / gw, pane.height / gh)
-      const minZ = Math.max(0.02, Math.min(fit * 0.5, 1))
+      // Clamp to [0.02, 3]: 3 is maxZoom, anything above would create an
+      // impossible (min > max) situation for very small graphs.
+      const minZ = Math.max(0.02, Math.min(fit, 3))
       setDynMinZoom(minZ)
     }
     compute()
     window.addEventListener('resize', compute)
     return () => window.removeEventListener('resize', compute)
+  }, [graphBounds])
+
+  // translateExtent = exact graph bounds. At minZoom the visible pane ==
+  // the graph (in flow coords), so pan is naturally frozen there. At higher
+  // zooms the pane is smaller than the graph and can be moved freely inside
+  // graphBounds, but never beyond — no empty canvas will ever be shown.
+  //
+  // This also anchors wheel-zoom: since the visible area is always inside
+  // the graph, the cursor (when over the pane) is always inside the graph
+  // area, so cursor-anchored zoom behaves as expected.
+  const translateExtent = useMemo(() => {
+    if (!graphBounds) return undefined
+    // 1-unit epsilon prevents float-rounding rejections at the exact
+    // min-zoom boundary where visible rect ≈ graph rect.
+    const eps = 1
+    return [
+      [graphBounds.minX - eps, graphBounds.minY - eps],
+      [graphBounds.maxX + eps, graphBounds.maxY + eps],
+    ]
   }, [graphBounds])
 
   // flowNodes = real nodes + a non-interactive red frame that outlines the
@@ -515,12 +542,11 @@ function TreeViewInner() {
     const graphH = maxY - minY
     if (graphW <= 0 || graphH <= 0) return false
 
-    const padding = 0.15
-    const zoomX = (rect.width * (1 - padding * 2)) / graphW
-    const zoomY = (rect.height * (1 - padding * 2)) / graphH
-    // Floor to dynMinZoom so ReactFlow doesn't clamp the zoom up while
-    // we've computed translate for a smaller one (that shifts the graph
-    // out of view).
+    // Use the exact fit zoom (pane / graph) — no padding, otherwise the
+    // computed zoom would be below dynMinZoom and ReactFlow would clamp
+    // it up, which shifts the graph off-screen.
+    const zoomX = rect.width / graphW
+    const zoomY = rect.height / graphH
     const zoom = Math.max(dynMinZoom, 0.02, Math.min(zoomX, zoomY, 1.5))
     const cx = (minX + maxX) / 2
     const cy = (minY + maxY) / 2
@@ -580,6 +606,13 @@ function TreeViewInner() {
     }
 
     const runFallback = () => {
+      // On F5/Ctrl+R the user explicitly asked for "always show the whole
+      // graph". We clear any saved viewport in the initial-state factory
+      // already, but double-check here.
+      if (isPageReload) {
+        fitAllNodes()
+        return
+      }
       try {
         const saved = sessionStorage.getItem(VIEWPORT_KEY)
         if (saved) {
@@ -588,7 +621,6 @@ function TreeViewInner() {
             setViewport(vp, { duration: 0 })
             return
           }
-          // Saved viewport would land the user in empty space — drop it.
           try { sessionStorage.removeItem(VIEWPORT_KEY) } catch {}
         }
       } catch {
@@ -618,7 +650,7 @@ function TreeViewInner() {
       cancelled = true
       if (rafId) cancelAnimationFrame(rafId)
     }
-  }, [rfReady, nodesFetched, edgesFetched, finalsFetched, flowNodes.length, highlightId, focusOnNode, fitAllNodes, setViewport, getNode, graphBounds, dynMinZoom])
+  }, [rfReady, nodesFetched, edgesFetched, finalsFetched, flowNodes.length, highlightId, focusOnNode, fitAllNodes, setViewport, getNode, graphBounds, dynMinZoom, isPageReload])
 
   return (
     <div className="h-screen flex flex-col" onClick={() => setContextMenu(null)}>
@@ -702,6 +734,7 @@ function TreeViewInner() {
             onMoveEnd={onMoveEnd}
             minZoom={dynMinZoom}
             maxZoom={3}
+            translateExtent={translateExtent}
             defaultEdgeOptions={{ type: 'smoothstep' }}
           >
             <Background gap={20} size={1} color="#e5e7eb" />
