@@ -445,12 +445,19 @@ function TreeViewInner() {
     return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad }
   }, [laidOutNodes, getNode])
 
-  // Dynamic minimum zoom = the zoom at which the graph bounding box fills
-  // the pane exactly. Any zoom level below that would expose empty space
-  // around the graph, which combined with translateExtent below would make
-  // ReactFlow start clamping translate in weird ways. So we simply forbid
-  // it — you cannot zoom out past "everything is visible".
+  // Pane-aware constraints: minimum zoom = "whole graph fits", and
+  // translateExtent = the area that the visible pane covers at that zoom
+  // (always ⊇ graphBounds, with extra "slack" in whichever axis is not the
+  // limiting one). Both depend on the current pane size, so they are
+  // recomputed on resize.
+  //
+  // Why the extent must extend beyond graphBounds: at fit zoom the viewport
+  // is exactly as tall (or wide) as the graph in the limiting dimension and
+  // LARGER than the graph in the other. If extent == graphBounds, ReactFlow
+  // can't place the viewport correctly (visible > extent on one axis) and
+  // clamps translate in a broken way — the graph drifts off-screen.
   const [dynMinZoom, setDynMinZoom] = useState(0.02)
+  const [translateExtent, setTranslateExtent] = useState(undefined)
   useEffect(() => {
     if (!graphBounds) return
     const compute = () => {
@@ -460,33 +467,27 @@ function TreeViewInner() {
       const gh = graphBounds.maxY - graphBounds.minY
       if (gw <= 0 || gh <= 0) return
       const fit = Math.min(pane.width / gw, pane.height / gh)
-      // Clamp to [0.02, 3]: 3 is maxZoom, anything above would create an
-      // impossible (min > max) situation for very small graphs.
       const minZ = Math.max(0.02, Math.min(fit, 3))
       setDynMinZoom(minZ)
+
+      // Extent centred on the graph, sized to match the visible area at
+      // fit zoom. That means at fit zoom the visible rect equals the
+      // extent exactly (pan locked). At higher zooms the visible rect is
+      // smaller and can be moved within extent — so the graph always
+      // stays on screen but the user can freely pan around inside.
+      const cx = (graphBounds.minX + graphBounds.maxX) / 2
+      const cy = (graphBounds.minY + graphBounds.maxY) / 2
+      const visW = pane.width / fit
+      const visH = pane.height / fit
+      const eps = 1
+      setTranslateExtent([
+        [cx - visW / 2 - eps, cy - visH / 2 - eps],
+        [cx + visW / 2 + eps, cy + visH / 2 + eps],
+      ])
     }
     compute()
     window.addEventListener('resize', compute)
     return () => window.removeEventListener('resize', compute)
-  }, [graphBounds])
-
-  // translateExtent = exact graph bounds. At minZoom the visible pane ==
-  // the graph (in flow coords), so pan is naturally frozen there. At higher
-  // zooms the pane is smaller than the graph and can be moved freely inside
-  // graphBounds, but never beyond — no empty canvas will ever be shown.
-  //
-  // This also anchors wheel-zoom: since the visible area is always inside
-  // the graph, the cursor (when over the pane) is always inside the graph
-  // area, so cursor-anchored zoom behaves as expected.
-  const translateExtent = useMemo(() => {
-    if (!graphBounds) return undefined
-    // 1-unit epsilon prevents float-rounding rejections at the exact
-    // min-zoom boundary where visible rect ≈ graph rect.
-    const eps = 1
-    return [
-      [graphBounds.minX - eps, graphBounds.minY - eps],
-      [graphBounds.maxX + eps, graphBounds.maxY + eps],
-    ]
   }, [graphBounds])
 
   // flowNodes = real nodes + a non-interactive red frame that outlines the
