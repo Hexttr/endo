@@ -91,19 +91,27 @@ function TreeViewInner() {
   const [edgesFetched, setEdgesFetched] = useState(false)
   const [finalsFetched, setFinalsFetched] = useState(false)
 
-  const { setViewport, getNode, screenToFlowPosition } = useReactFlow()
+  const { setViewport, getNode, getViewport, screenToFlowPosition } = useReactFlow()
 
   // Predictable zoom level for the "focus" action. Same value every time.
   const FOCUS_ZOOM = 1.5
 
-  // Deterministic centering that bypasses ReactFlow's internal node-position
-  // bookkeeping entirely. We read the target node's REAL bounding rect from
-  // the DOM (React Flow renders each node as `.react-flow__node[data-id=X]`
-  // with the viewport transform already applied), convert its screen-space
-  // centre back to flow coordinates via screenToFlowPosition, then project
-  // those flow coordinates to a new viewport translate at the target zoom.
+  // Self-correcting centering. Strategy:
+  //   1. Read the target node's real screen-space bounding rect from the DOM
+  //      (React Flow renders each node as `.react-flow__node[data-id=X]` with
+  //      all transforms already applied).
+  //   2. Wait across a few animation frames until the node's height stops
+  //      changing — this avoids capturing a half-rendered rect.
+  //   3. Convert the stabilised centre to flow coords via screenToFlowPosition
+  //      and project to setViewport(x, y, zoom) at FOCUS_ZOOM.
+  //   4. ~720 ms later (after the smooth animation) re-read the node's screen
+  //      rect. If its centre is more than 2 px off from the pane centre, add
+  //      the delta directly to the current viewport — that delta is in screen
+  //      pixels, which is exactly the unit of viewport.{x,y}. One correction
+  //      is enough; we never loop, to avoid any chance of oscillation.
   //
-  // Screen = flow * zoom + translate  =>  translate = paneHalf - centerFlow * zoom
+  // All decisions are logged under the [TreeView/focus] prefix so residual
+  // issues can be diagnosed from devtools without changing any code.
   const focusOnNode = useCallback((nodeId) => {
     if (!nodeId) return false
     const pane = paneRef.current
@@ -111,23 +119,94 @@ function TreeViewInner() {
     const paneRect = pane.getBoundingClientRect()
     if (!paneRect.width || !paneRect.height) return false
 
-    const nodeEl = pane.querySelector(`.react-flow__node[data-id="${CSS.escape(nodeId)}"]`)
+    const selector = `.react-flow__node[data-id="${CSS.escape(nodeId)}"]`
+    const nodeEl = pane.querySelector(selector)
     if (!nodeEl) return false
-    const nr = nodeEl.getBoundingClientRect()
-    if (!nr.width || !nr.height) return false
+    const initialRect = nodeEl.getBoundingClientRect()
+    if (!initialRect.width || !initialRect.height) return false
 
-    // Node centre in absolute screen coordinates → flow coordinates.
-    const centerFlow = screenToFlowPosition({
-      x: nr.left + nr.width / 2,
-      y: nr.top + nr.height / 2,
-    })
+    const MAX_STABLE_ATTEMPTS = 10
+    let lastHeight = initialRect.height
+    let stableFrames = 0
 
-    const zoom = FOCUS_ZOOM
-    const x = paneRect.width / 2 - centerFlow.x * zoom
-    const y = paneRect.height / 2 - centerFlow.y * zoom
-    setViewport({ x, y, zoom }, { duration: 650 })
+    const commit = (finalRect) => {
+      const centerFlow = screenToFlowPosition({
+        x: finalRect.left + finalRect.width / 2,
+        y: finalRect.top + finalRect.height / 2,
+      })
+      const zoom = FOCUS_ZOOM
+      const x = paneRect.width / 2 - centerFlow.x * zoom
+      const y = paneRect.height / 2 - centerFlow.y * zoom
+
+      console.log('[TreeView/focus] start', {
+        nodeId,
+        paneRect: { left: paneRect.left, top: paneRect.top, width: paneRect.width, height: paneRect.height },
+        nodeRect: { left: finalRect.left, top: finalRect.top, width: finalRect.width, height: finalRect.height },
+        centerFlow,
+        viewport: { x, y, zoom },
+      })
+
+      setViewport({ x, y, zoom }, { duration: 650 })
+
+      setTimeout(() => {
+        const el = pane.querySelector(selector)
+        if (!el) {
+          console.warn('[TreeView/focus] verify skipped — node element no longer in DOM')
+          return
+        }
+        const actualNr = el.getBoundingClientRect()
+        const latestPane = pane.getBoundingClientRect()
+        const actualCenter = {
+          x: actualNr.left + actualNr.width / 2,
+          y: actualNr.top + actualNr.height / 2,
+        }
+        const paneCenter = {
+          x: latestPane.left + latestPane.width / 2,
+          y: latestPane.top + latestPane.height / 2,
+        }
+        const dx = paneCenter.x - actualCenter.x
+        const dy = paneCenter.y - actualCenter.y
+
+        console.log('[TreeView/focus] verify', {
+          nodeId,
+          nodeRect: { left: actualNr.left, top: actualNr.top, width: actualNr.width, height: actualNr.height },
+          paneCenter,
+          delta: { dx, dy },
+        })
+
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+          const vp = getViewport()
+          const corrected = { x: vp.x + dx, y: vp.y + dy, zoom: vp.zoom }
+          setViewport(corrected, { duration: 200 })
+          console.log('[TreeView/focus] corrected', corrected)
+        } else {
+          console.log('[TreeView/focus] ok — within 2 px of pane centre')
+        }
+      }, 720)
+    }
+
+    const waitStable = (attempt) => {
+      const cur = nodeEl.getBoundingClientRect()
+      if (Math.abs(cur.height - lastHeight) < 0.5) {
+        stableFrames += 1
+      } else {
+        stableFrames = 0
+        lastHeight = cur.height
+      }
+      if (stableFrames >= 2 || attempt >= MAX_STABLE_ATTEMPTS) {
+        if (stableFrames < 2) {
+          console.warn('[TreeView/focus] height did not stabilise after', attempt, 'frames — proceeding anyway')
+        }
+        commit(cur)
+        return
+      }
+      console.log('[TreeView/focus] waiting…', { attempt, height: cur.height })
+      requestAnimationFrame(() => waitStable(attempt + 1))
+    }
+
+    waitStable(0)
     return true
-  }, [screenToFlowPosition, setViewport])
+  }, [screenToFlowPosition, setViewport, getViewport])
 
   const loadEdges = () => fetchEdgesGraph()
     .then(d => { setAllEdges(d); setEdgesFetched(true) })
@@ -207,6 +286,7 @@ function TreeViewInner() {
   const navigate = useNavigate()
 
   const onNodeDoubleClick = useCallback((event, node) => {
+    if (node.data?.isBounds) return
     if (node.data?.isFinal) navigate(`/finals/${node.id}`)
     else navigate(`/nodes/${node.id}`)
   }, [navigate])
@@ -272,7 +352,10 @@ function TreeViewInner() {
     setEditingEdgeLabel(null)
   }
 
-  const flowNodes = useMemo(() => {
+  // laidOutNodes — real graph nodes (regular + finals) after dagre layout or
+  // the grid fallback. graphBounds are computed off of these. The bounds frame
+  // is then appended as a non-interactive pseudo-node in flowNodes.
+  const laidOutNodes = useMemo(() => {
     const raw = filteredNodes.map(n => {
       const colors = SECTION_COLORS[n.section] || { bg: '#f3f4f6', border: '#d1d5db', badge: '#6b7280' }
       const shortText = n.text.length > 45 ? n.text.substring(0, 43) + '...' : n.text
@@ -327,6 +410,67 @@ function TreeViewInner() {
     return layoutGraph(raw, flowEdges)
   }, [filteredNodes, finals, flowEdges, showFinals, highlightId])
 
+  // Bounding box of the real graph in flow coords. Uses each node's actual
+  // measured height (if React Flow has already observed it) and falls back to
+  // NODE_H / node.style.width otherwise.
+  const graphBounds = useMemo(() => {
+    if (laidOutNodes.length === 0) return null
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    laidOutNodes.forEach(n => {
+      const rfn = getNode(n.id)
+      const w = rfn?.measured?.width || n.style?.width || NODE_W
+      const h = rfn?.measured?.height || NODE_H
+      if (n.position.x < minX) minX = n.position.x
+      if (n.position.y < minY) minY = n.position.y
+      if (n.position.x + w > maxX) maxX = n.position.x + w
+      if (n.position.y + h > maxY) maxY = n.position.y + h
+    })
+    if (!Number.isFinite(minX)) return null
+    const pad = 60
+    return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad }
+  }, [laidOutNodes, getNode])
+
+  // translateExtent limits how far the camera can pan away from the graph.
+  // We allow roughly one screen of slack at the target focus zoom around the
+  // bounding box, so the red frame never sits against the edge.
+  const translateExtent = useMemo(() => {
+    if (!graphBounds) return undefined
+    const paneRect = paneRef.current?.getBoundingClientRect()
+    const paneSide = Math.max(paneRect?.width || 600, paneRect?.height || 600)
+    const buf = paneSide / FOCUS_ZOOM
+    return [
+      [graphBounds.minX - buf, graphBounds.minY - buf],
+      [graphBounds.maxX + buf, graphBounds.maxY + buf],
+    ]
+  }, [graphBounds])
+
+  // flowNodes = real nodes + a non-interactive red frame that outlines the
+  // graph bounds. The frame is intentionally drawn as a node so it follows
+  // the viewport transform automatically.
+  const flowNodes = useMemo(() => {
+    if (!graphBounds) return laidOutNodes
+    const frame = {
+      id: '__graph_bounds__',
+      position: { x: graphBounds.minX, y: graphBounds.minY },
+      data: { isBounds: true, label: '' },
+      draggable: false,
+      selectable: false,
+      connectable: false,
+      focusable: false,
+      zIndex: -1,
+      style: {
+        width: graphBounds.maxX - graphBounds.minX,
+        height: graphBounds.maxY - graphBounds.minY,
+        border: '3px solid #ef4444',
+        borderRadius: 14,
+        background: 'transparent',
+        pointerEvents: 'none',
+        boxSizing: 'border-box',
+      },
+    }
+    return [frame, ...laidOutNodes]
+  }, [laidOutNodes, graphBounds])
+
   // Default fitView fallback: centres the whole graph at whatever zoom fits
   // with 15% padding. Uses the same manual projection as focusOnNode so we
   // never depend on ReactFlow's internal measurement timing.
@@ -338,6 +482,7 @@ function TreeViewInner() {
 
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
     flowNodes.forEach(n => {
+      if (n.data?.isBounds) return
       const rfn = getNode(n.id)
       const w = rfn?.measured?.width || n.style?.width || NODE_W
       const h = rfn?.measured?.height || NODE_H
@@ -510,13 +655,15 @@ function TreeViewInner() {
             onMoveEnd={onMoveEnd}
             minZoom={0.02}
             maxZoom={3}
+            translateExtent={translateExtent}
             defaultEdgeOptions={{ type: 'smoothstep' }}
           >
             <Background gap={20} size={1} color="#e5e7eb" />
             <Controls position="bottom-right" />
             <MiniMap
               zoomable pannable
-              nodeColor={(n) => SECTION_COLORS[n.data?.section]?.border || '#d1d5db'}
+              nodeColor={(n) => n.data?.isBounds ? 'transparent' : (SECTION_COLORS[n.data?.section]?.border || '#d1d5db')}
+              nodeStrokeColor={(n) => n.data?.isBounds ? 'transparent' : '#9ca3af'}
               style={{ width: 160, height: 100 }}
             />
           </ReactFlow>
