@@ -431,13 +431,12 @@ function TreeViewInner() {
   }, [laidOutNodes, getNode])
 
   // translateExtent limits how far the camera can pan away from the graph.
-  // We allow roughly one screen of slack at the target focus zoom around the
-  // bounding box, so the red frame never sits against the edge.
+  // Kept tight on purpose: the pane centre must always stay inside (or at
+  // most a small buffer outside) the red frame. Otherwise users can reload
+  // into a viewport that shows empty space.
   const translateExtent = useMemo(() => {
     if (!graphBounds) return undefined
-    const paneRect = paneRef.current?.getBoundingClientRect()
-    const paneSide = Math.max(paneRect?.width || 600, paneRect?.height || 600)
-    const buf = paneSide / FOCUS_ZOOM
+    const buf = 80
     return [
       [graphBounds.minX - buf, graphBounds.minY - buf],
       [graphBounds.maxX + buf, graphBounds.maxY + buf],
@@ -536,17 +535,40 @@ function TreeViewInner() {
     let cancelled = false
     let rafId = 0
 
+    // Validate a saved viewport: at its zoom/translate, the pane centre must
+    // resolve to a flow coordinate inside the graph bounds. Anything else is
+    // treated as stale (e.g. a bad viewport saved during an earlier buggy
+    // build) and discarded so we fall through to fitAllNodes.
+    const isSavedViewportValid = (vp) => {
+      if (!vp || typeof vp.x !== 'number' || typeof vp.y !== 'number' || typeof vp.zoom !== 'number') return false
+      if (!Number.isFinite(vp.x) || !Number.isFinite(vp.y) || !Number.isFinite(vp.zoom)) return false
+      if (vp.zoom < 0.1 || vp.zoom > 3) return false
+      if (!graphBounds) return false
+      const pane = paneRef.current?.getBoundingClientRect()
+      if (!pane || !pane.width || !pane.height) return false
+      const centerFlowX = (pane.width / 2 - vp.x) / vp.zoom
+      const centerFlowY = (pane.height / 2 - vp.y) / vp.zoom
+      return (
+        centerFlowX >= graphBounds.minX && centerFlowX <= graphBounds.maxX &&
+        centerFlowY >= graphBounds.minY && centerFlowY <= graphBounds.maxY
+      )
+    }
+
     const runFallback = () => {
       try {
         const saved = sessionStorage.getItem(VIEWPORT_KEY)
         if (saved) {
           const vp = JSON.parse(saved)
-          if (vp && typeof vp.x === 'number' && typeof vp.y === 'number' && typeof vp.zoom === 'number') {
+          if (isSavedViewportValid(vp)) {
             setViewport(vp, { duration: 0 })
             return
           }
+          // Saved viewport would land the user in empty space — drop it.
+          try { sessionStorage.removeItem(VIEWPORT_KEY) } catch {}
         }
-      } catch {}
+      } catch {
+        try { sessionStorage.removeItem(VIEWPORT_KEY) } catch {}
+      }
       fitAllNodes()
     }
 
@@ -571,7 +593,7 @@ function TreeViewInner() {
       cancelled = true
       if (rafId) cancelAnimationFrame(rafId)
     }
-  }, [rfReady, nodesFetched, edgesFetched, finalsFetched, flowNodes.length, highlightId, focusOnNode, fitAllNodes, setViewport, getNode])
+  }, [rfReady, nodesFetched, edgesFetched, finalsFetched, flowNodes.length, highlightId, focusOnNode, fitAllNodes, setViewport, getNode, graphBounds])
 
   return (
     <div className="h-screen flex flex-col" onClick={() => setContextMenu(null)}>
