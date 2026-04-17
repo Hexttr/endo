@@ -81,40 +81,65 @@ function TreeViewInner() {
     return fromSession || searchParams.get('highlight') || null
   })
   const initDone = useRef(false)
-  const rafRef = useRef(null)
+  const paneRef = useRef(null)
   const [rfReady, setRfReady] = useState(false)
+  // Each of these flips true once the corresponding fetch RESOLVES (even when
+  // it returns an empty array). We wait for ALL three before running the
+  // initial viewport logic, otherwise dagre can re-layout on a partial graph
+  // and we'd centre on stale coordinates.
+  const [nodesFetched, setNodesFetched] = useState(false)
+  const [edgesFetched, setEdgesFetched] = useState(false)
+  const [finalsFetched, setFinalsFetched] = useState(false)
 
-  const { fitView, setViewport, getNode } = useReactFlow()
+  const { setViewport, getNode } = useReactFlow()
 
-  // Focus zoom level used when centring on a specific node. One shared constant
-  // so every "focus" behaves identically and the result is predictable.
+  // Predictable zoom level for the "focus" action. Same value every time.
   const FOCUS_ZOOM = 1.5
 
+  // Deterministic centering. Computes the viewport transform directly from:
+  //   - the pane's own DOM bounding box (not ReactFlow's internal store which
+  //     can be stale on first render),
+  //   - the target node's dagre-computed position,
+  //   - the node's actual measured DOM size if available, falling back to
+  //     (NODE_W, NODE_H) so dagre math stays consistent.
+  // Screen pixel = flowCoord * zoom + translate  =>  translate = paneCenter - center * zoom
   const focusOnNode = useCallback((nodeId) => {
     if (!nodeId) return false
-    // Verify the node is actually in the flow; otherwise fitView silently does nothing.
+    const pane = paneRef.current
+    if (!pane) return false
+    const rect = pane.getBoundingClientRect()
+    if (!rect.width || !rect.height) return false
     const rfNode = getNode(nodeId)
-    if (!rfNode) return false
-    fitView({
-      nodes: [{ id: nodeId }],
-      duration: 650,
-      minZoom: FOCUS_ZOOM,
-      maxZoom: FOCUS_ZOOM,
-      padding: 0.4,
-    })
-    return true
-  }, [fitView, getNode])
+    if (!rfNode || !rfNode.position) return false
 
-  const loadEdges = () => fetchEdgesGraph().then(setAllEdges).catch(() => {})
+    const w = rfNode.measured?.width || rfNode.width || NODE_W
+    const h = rfNode.measured?.height || rfNode.height || NODE_H
+    const cx = rfNode.position.x + w / 2
+    const cy = rfNode.position.y + h / 2
+
+    const zoom = FOCUS_ZOOM
+    const x = rect.width / 2 - cx * zoom
+    const y = rect.height / 2 - cy * zoom
+    setViewport({ x, y, zoom }, { duration: 650 })
+    return true
+  }, [getNode, setViewport])
+
+  const loadEdges = () => fetchEdgesGraph()
+    .then(d => { setAllEdges(d); setEdgesFetched(true) })
+    .catch(() => setEdgesFetched(true))
 
   useEffect(() => {
     fetchSections().then(setSections).catch(() => {})
     loadEdges()
-    fetchFinals().then(setFinals).catch(() => {})
+    fetchFinals()
+      .then(d => { setFinals(d); setFinalsFetched(true) })
+      .catch(() => setFinalsFetched(true))
   }, [])
 
   useEffect(() => {
-    fetchNodes(selectedSection || undefined).then(setNodes).catch(() => {})
+    fetchNodes(selectedSection || undefined)
+      .then(d => { setNodes(d); setNodesFetched(true) })
+      .catch(() => setNodesFetched(true))
   }, [selectedSection])
 
   // Fired by ReactFlow when its internal instance is ready to receive commands.
@@ -297,22 +322,63 @@ function TreeViewInner() {
     return layoutGraph(raw, flowEdges)
   }, [filteredNodes, finals, flowEdges, showFinals, highlightId])
 
+  // Default fitView fallback: centres the whole graph at whatever zoom fits
+  // with 15% padding. Uses the same manual projection as focusOnNode so we
+  // never depend on ReactFlow's internal measurement timing.
+  const fitAllNodes = useCallback(() => {
+    const pane = paneRef.current
+    if (!pane || flowNodes.length === 0) return false
+    const rect = pane.getBoundingClientRect()
+    if (!rect.width || !rect.height) return false
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    flowNodes.forEach(n => {
+      const rfn = getNode(n.id)
+      const w = rfn?.measured?.width || n.style?.width || NODE_W
+      const h = rfn?.measured?.height || NODE_H
+      const x = n.position.x
+      const y = n.position.y
+      if (x < minX) minX = x
+      if (y < minY) minY = y
+      if (x + w > maxX) maxX = x + w
+      if (y + h > maxY) maxY = y + h
+    })
+    const graphW = maxX - minX
+    const graphH = maxY - minY
+    if (graphW <= 0 || graphH <= 0) return false
+
+    const padding = 0.15
+    const zoomX = (rect.width * (1 - padding * 2)) / graphW
+    const zoomY = (rect.height * (1 - padding * 2)) / graphH
+    const zoom = Math.max(0.05, Math.min(zoomX, zoomY, 1.5))
+    const cx = (minX + maxX) / 2
+    const cy = (minY + maxY) / 2
+    const x = rect.width / 2 - cx * zoom
+    const y = rect.height / 2 - cy * zoom
+    setViewport({ x, y, zoom }, { duration: 0 })
+    return true
+  }, [flowNodes, getNode, setViewport])
+
   // One-time viewport initialization. We wait for:
   //   1. The ReactFlow instance to be ready (onInit fired)
-  //   2. Nodes to be fetched
-  //   3. Edges OR finals to be fetched (so dagre runs on a stable graph and
-  //      flowNodes contains real laid-out positions, not the grid fallback)
+  //   2. All three fetches to have RESOLVED (nodes, edges, finals) so the
+  //      graph we're measuring is the final one — otherwise dagre re-lays
+  //      everything after partial data arrives and we centre on stale coords.
+  //   3. flowNodes to contain at least one item.
+  //   4. The pane's DOM bounding box to have real width/height (browser
+  //      layout pass completed).
   //
-  // Then, inside a double-rAF, we either focus on the highlight target,
-  // restore the saved viewport, or run a default fitView. Double rAF is
-  // needed because ReactFlow measures node DOM sizes on its own render
-  // cycle — a single frame is not enough.
+  // Then we either focus on the highlight target, restore the saved viewport,
+  // or run the default fit. Double rAF lets React Flow finish its internal
+  // measurement pass so getNode(id).measured is populated.
   useEffect(() => {
     if (initDone.current) return
     if (!rfReady) return
+    if (!nodesFetched || !edgesFetched || !finalsFetched) return
     if (flowNodes.length === 0) return
-    const dataReady = nodes.length > 0 && (allEdges.length > 0 || finals.length > 0)
-    if (!dataReady) return
+    if (highlightId && !getNode(highlightId)) return
+    const rect = paneRef.current?.getBoundingClientRect()
+    if (!rect || !rect.width || !rect.height) return
 
     initDone.current = true
 
@@ -330,19 +396,14 @@ function TreeViewInner() {
         }
       } catch {}
 
-      fitView({ padding: 0.15, duration: 0 })
+      fitAllNodes()
     }
 
     const raf1 = requestAnimationFrame(() => {
-      const raf2 = requestAnimationFrame(runInit)
-      // store for cleanup
-      rafRef.current = raf2
+      requestAnimationFrame(runInit)
     })
-    rafRef.current = raf1
-    return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    }
-  }, [rfReady, flowNodes.length, nodes.length, allEdges.length, finals.length, highlightId, focusOnNode, fitView, setViewport])
+    return () => cancelAnimationFrame(raf1)
+  }, [rfReady, nodesFetched, edgesFetched, finalsFetched, flowNodes.length, highlightId, focusOnNode, fitAllNodes, setViewport, getNode])
 
   return (
     <div className="h-screen flex flex-col" onClick={() => setContextMenu(null)}>
@@ -413,7 +474,7 @@ function TreeViewInner() {
         </div>
 
         {/* Graph */}
-        <div className="flex-1 relative">
+        <div ref={paneRef} className="flex-1 relative">
           <ReactFlow
             nodes={flowNodes}
             edges={flowEdges}
