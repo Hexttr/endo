@@ -22,8 +22,17 @@ from telegram.ext import (
     filters,
 )
 
+import html
+
 import api_client
 from keyboards import build_keyboard, build_multi_choice_keyboard, build_numeric_keyboard
+
+
+def _h(value) -> str:
+    """HTML-escape a value for safe interpolation into parse_mode=HTML messages."""
+    if value is None:
+        return ""
+    return html.escape(str(value), quote=False)
 
 logger = logging.getLogger(__name__)
 
@@ -220,30 +229,30 @@ async def _present_node_as_new_message(message, context, node: dict) -> int:
 
     if input_type in ("single_choice", "yes_no"):
         kb = build_keyboard(node.get("options", []), unknown_action=node.get("unknown_action"))
-        sent = await message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
+        sent = await message.reply_text(text, reply_markup=kb, parse_mode="HTML")
     elif input_type == "multi_choice":
         context.user_data["multi_selected"] = set()
         kb = build_multi_choice_keyboard(node.get("options", []), set())
         sent = await message.reply_text(
-            text + "\n\n_Выберите все подходящие варианты и нажмите «Готово»._",
+            text + "\n\n<i>Выберите все подходящие варианты и нажмите «Готово».</i>",
             reply_markup=kb,
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
     elif input_type == "numeric":
         fields_desc = ""
         if node.get("extra") and node["extra"].get("fields"):
             for f in node["extra"]["fields"]:
-                fields_desc += f"\n  • {f['label']}"
+                fields_desc += f"\n  • {_h(f['label'])}"
         kb = build_numeric_keyboard()
         sent = await message.reply_text(
-            text + f"\n\nВведите значения в формате: `Hb=120 PLT=200`{fields_desc}",
+            text + f"\n\nВведите значения в формате: <code>Hb=120 PLT=200</code>{fields_desc}",
             reply_markup=kb,
-            parse_mode="Markdown",
+            parse_mode="HTML",
         )
     else:
         # info / action / anything else — show with single "Далее" button
         kb = InlineKeyboardMarkup([[InlineKeyboardButton("▶ Далее", callback_data="next")]])
-        sent = await message.reply_text(text, reply_markup=kb, parse_mode="Markdown")
+        sent = await message.reply_text(text, reply_markup=kb, parse_mode="HTML")
 
     # Track the last question so we can strip its keyboard when the user
     # advances via text input (prevents clicking stale buttons).
@@ -258,9 +267,9 @@ async def _present_node_as_new_message(message, context, node: dict) -> int:
 
 
 def _format_node_header(node: dict) -> str:
-    text = f"📋 *{node['id']}*\n\n{node['text']}"
+    text = f"📋 <b>{_h(node['id'])}</b>\n\n{_h(node['text'])}"
     if node.get("description"):
-        text += f"\n\n_{node['description']}_"
+        text += f"\n\n<i>{_h(node['description'])}</i>"
     return text
 
 
@@ -272,12 +281,14 @@ async def _freeze_question(query, node: dict, answer_label: str) -> None:
     The result stays in chat forever as a transcript entry."""
     node_id = node.get("id", "?")
     text = node.get("text", "")
-    safe_label = _escape_md(answer_label)
-    frozen = f"📋 *{node_id}*\n\n{text}\n\n✅ _Ответ:_ *{safe_label}*"
+    frozen = (
+        f"📋 <b>{_h(node_id)}</b>\n\n{_h(text)}\n\n"
+        f"✅ <i>Ответ:</i> <b>{_h(answer_label)}</b>"
+    )
     try:
-        await query.edit_message_text(frozen, parse_mode="Markdown")
+        await query.edit_message_text(frozen, parse_mode="HTML")
     except Exception:
-        # Ignore edit-not-allowed / message-not-modified errors — don't block the flow.
+        # Ignore edit-not-allowed / message-not-modified / parse errors — don't block the flow.
         try:
             await query.edit_message_reply_markup(reply_markup=None)
         except Exception:
@@ -305,13 +316,6 @@ def _multi_display(node: dict, selected_ids: list) -> str:
     return " + ".join(labels) if labels else ", ".join(selected_ids)
 
 
-def _escape_md(text: str) -> str:
-    """Escape Markdown v1 special characters to avoid parse errors."""
-    if not text:
-        return text
-    return text.replace("*", "∗").replace("_", "‿").replace("[", "(").replace("]", ")").replace("`", "'")
-
-
 # ──────────────────────────────────────────────────────────────────────────
 # Final / pending / terminal presentation
 # ──────────────────────────────────────────────────────────────────────────
@@ -320,99 +324,131 @@ async def _send_final(message, data: dict) -> None:
     flags = data.get("unknown_flags", [])
     collected = data.get("collected_data", {})
 
-    lines = [f"🏁 *ДИАГНОЗ: {final.get('diagnosis', '—')}*"]
+    lines = [f"🏁 <b>ДИАГНОЗ: {_h(final.get('diagnosis', '—'))}</b>"]
 
     if final.get("endo_picture"):
-        lines.append(f"\n🔬 *Эндоскопическая картина:*\n{final['endo_picture']}")
+        lines.append(f"\n🔬 <b>Эндоскопическая картина:</b>\n{_h(final['endo_picture'])}")
     if final.get("equipment"):
         equip = final["equipment"]
         if isinstance(equip, list):
             equip = ", ".join(equip)
-        lines.append(f"\n🔧 *Оборудование:*\n{equip}")
+        lines.append(f"\n🔧 <b>Оборудование:</b>\n{_h(equip)}")
     if final.get("algorithm"):
-        lines.append(f"\n📋 *Алгоритм:*\n{final['algorithm']}")
+        lines.append(f"\n📋 <b>Алгоритм:</b>\n{_h(final['algorithm'])}")
     if final.get("routing"):
-        lines.append(f"\n👨‍⚕ *Маршрутизация:*\n{final['routing']}")
+        lines.append(f"\n👨‍⚕ <b>Маршрутизация:</b>\n{_h(final['routing'])}")
     if final.get("followup"):
-        lines.append(f"\n📅 *Наблюдение:*\n{final['followup']}")
+        lines.append(f"\n📅 <b>Наблюдение:</b>\n{_h(final['followup'])}")
 
     if flags:
-        lines.append("\n⚠ *Данные требуют уточнения:*")
+        lines.append("\n⚠ <b>Данные требуют уточнения:</b>")
         for f in flags:
-            lines.append(f"  • {f.get('node', '?')}: {f.get('reason', '?')}")
+            lines.append(f"  • {_h(f.get('node', '?'))}: {_h(f.get('reason', '?'))}")
 
-    summary = _collected_summary(collected)
+    summary = _collected_summary_html(collected)
     if summary:
-        lines.append(f"\n📝 *Собранные данные:*\n{summary}")
+        lines.append(f"\n📝 <b>Собранные данные:</b>\n{summary}")
 
     lines.append("\n\nДля нового сеанса: /start")
 
-    await message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await _send_html(message, "\n".join(lines))
 
 
 async def _send_pending(message, node: dict, data: dict) -> None:
     """Pending node = all data captured, awaiting external workup."""
-    lines = [f"⏳ *Этап завершён — требуется дообследование*"]
-    lines.append(f"\n📋 *{node['id']}* — {node.get('section', '')}")
-    lines.append(f"\n{node.get('text', '')}")
+    lines = ["⏳ <b>Этап завершён — требуется дообследование</b>"]
+    lines.append(f"\n📋 <b>{_h(node['id'])}</b> — {_h(node.get('section', ''))}")
+    lines.append(f"\n{_h(node.get('text', ''))}")
 
     if node.get("return_node"):
-        lines.append(f"\n🔁 После получения данных: вернуться к узлу *{node['return_node']}*")
+        lines.append(f"\n🔁 После получения данных: вернуться к узлу <b>{_h(node['return_node'])}</b>")
 
     flags = data.get("unknown_flags", [])
     if flags:
-        lines.append("\n⚠ *Пропущенные данные:*")
+        lines.append("\n⚠ <b>Пропущенные данные:</b>")
         for f in flags:
-            lines.append(f"  • {f.get('node', '?')}: {f.get('reason', '?')}")
+            lines.append(f"  • {_h(f.get('node', '?'))}: {_h(f.get('reason', '?'))}")
 
-    summary = _collected_summary(data.get("collected_data", {}))
+    summary = _collected_summary_html(data.get("collected_data", {}))
     if summary:
-        lines.append(f"\n📝 *Уже собрано:*\n{summary}")
+        lines.append(f"\n📝 <b>Уже собрано:</b>\n{summary}")
 
     lines.append("\n\nДля нового сеанса: /start")
 
-    await message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await _send_html(message, "\n".join(lines))
 
 
 async def _send_terminal(message, node: dict, data: dict) -> None:
     """Terminal info/action node without a specific final diagnosis."""
-    lines = [f"🏁 *Итог*"]
-    lines.append(f"\n📋 *{node['id']}*")
-    lines.append(f"\n{node.get('text', '')}")
+    lines = ["🏁 <b>Итог</b>"]
+    lines.append(f"\n📋 <b>{_h(node['id'])}</b>")
+    lines.append(f"\n{_h(node.get('text', ''))}")
     if node.get("description"):
-        lines.append(f"\n_{node['description']}_")
+        lines.append(f"\n<i>{_h(node['description'])}</i>")
 
     flags = data.get("unknown_flags", [])
     if flags:
-        lines.append("\n⚠ *Пропущенные данные:*")
+        lines.append("\n⚠ <b>Пропущенные данные:</b>")
         for f in flags:
-            lines.append(f"  • {f.get('node', '?')}: {f.get('reason', '?')}")
+            lines.append(f"  • {_h(f.get('node', '?'))}: {_h(f.get('reason', '?'))}")
 
-    summary = _collected_summary(data.get("collected_data", {}))
+    summary = _collected_summary_html(data.get("collected_data", {}))
     if summary:
-        lines.append(f"\n📝 *Собранные данные:*\n{summary}")
+        lines.append(f"\n📝 <b>Собранные данные:</b>\n{summary}")
 
     lines.append("\n\nДля нового сеанса: /start")
 
-    await message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await _send_html(message, "\n".join(lines))
 
 
 async def _send_graceful_end(message, data: dict) -> None:
-    lines = ["🏁 *Диагностика завершена*"]
-    summary = _collected_summary(data.get("collected_data", {}))
+    lines = ["🏁 <b>Диагностика завершена</b>"]
+    summary = _collected_summary_html(data.get("collected_data", {}))
     if summary:
-        lines.append(f"\n📝 *Собранные данные:*\n{summary}")
+        lines.append(f"\n📝 <b>Собранные данные:</b>\n{summary}")
     flags = data.get("unknown_flags", [])
     if flags:
-        lines.append("\n⚠ *Пропущенные данные:*")
+        lines.append("\n⚠ <b>Пропущенные данные:</b>")
         for f in flags:
-            lines.append(f"  • {f.get('node', '?')}: {f.get('reason', '?')}")
+            lines.append(f"  • {_h(f.get('node', '?'))}: {_h(f.get('reason', '?'))}")
     lines.append("\n\nДля нового сеанса: /start")
-    await message.reply_text("\n".join(lines), parse_mode="Markdown")
+    await _send_html(message, "\n".join(lines))
 
 
-def _collected_summary(collected: dict) -> str:
-    """Render a compact summary of all collected answers."""
+async def _send_html(message, text: str) -> None:
+    """Send a long HTML message, splitting into 4000-char chunks if needed.
+    Falls back to plain text if HTML parsing fails."""
+    MAX = 4000
+    chunks = []
+    remaining = text
+    while len(remaining) > MAX:
+        # Split on the last newline before the limit to avoid breaking tags.
+        cut = remaining.rfind("\n", 0, MAX)
+        if cut == -1:
+            cut = MAX
+        chunks.append(remaining[:cut])
+        remaining = remaining[cut:]
+    chunks.append(remaining)
+
+    for chunk in chunks:
+        try:
+            await message.reply_text(chunk, parse_mode="HTML")
+        except Exception as e:
+            logger.warning("HTML send failed, retrying as plain text: %s", e)
+            # Strip tags and retry without parse mode.
+            plain = (
+                chunk.replace("<b>", "").replace("</b>", "")
+                .replace("<i>", "").replace("</i>", "")
+                .replace("<code>", "").replace("</code>", "")
+            )
+            try:
+                await message.reply_text(plain)
+            except Exception:
+                logger.exception("Plain send also failed")
+
+
+def _collected_summary_html(collected: dict) -> str:
+    """Render a compact HTML summary of all collected answers."""
     if not collected:
         return ""
     lines = []
@@ -425,7 +461,7 @@ def _collected_summary(collected: dict) -> str:
             pretty = str(v)
         if len(pretty) > 120:
             pretty = pretty[:117] + "..."
-        lines.append(f"  • `{k}`: {pretty}")
+        lines.append(f"  • <code>{_h(k)}</code>: {_h(pretty)}")
     return "\n".join(lines)
 
 
