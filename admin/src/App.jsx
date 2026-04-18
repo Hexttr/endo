@@ -123,8 +123,12 @@ function Layout({ children, onLogout }) {
     <div className="min-h-screen flex">
       <nav className="w-64 bg-gray-900 text-white flex flex-col shrink-0">
         <div className="p-6 border-b border-gray-700">
-          <h1 className="text-lg font-bold">Endo Bot Admin</h1>
-          <p className="text-gray-400 text-xs mt-1">Управление логикой бота</p>
+          <img
+            src="/logo-w.png"
+            alt="Endo Bot"
+            className="h-11 w-auto max-w-full object-contain object-left"
+          />
+          <p className="text-gray-400 text-xs mt-3">Управление логикой бота</p>
         </div>
         <SchemaSwitcher />
         <div className="flex-1 py-4 overflow-auto">
