@@ -6,7 +6,7 @@ import {
 } from '../api'
 import {
   GitBranch, Copy, Trash2, Plus, Edit3, Check, X,
-  Bot as BotIcon, Eye, EyeOff, AlertCircle, Power, Layers,
+  Bot as BotIcon, Eye, EyeOff, AlertCircle, Power, Layers, HelpCircle,
 } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 
@@ -20,6 +20,16 @@ export default function SchemasList() {
   const [editingId, setEditingId] = useState(null)
   const [editDraft, setEditDraft] = useState({ name: '', description: '' })
   const [error, setError] = useState('')
+  const [botGuideOpen, setBotGuideOpen] = useState(false)
+
+  useEffect(() => {
+    if (!botGuideOpen) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') setBotGuideOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [botGuideOpen])
 
   async function handleCreate() {
     setError('')
@@ -105,13 +115,144 @@ export default function SchemasList() {
         title="Схемы диагностики"
         subtitle="Каждая схема — независимое дерево узлов и диагнозов. Можно привязать отдельного Telegram-бота к каждой схеме."
       >
-        <button
-          onClick={() => { setCreating(true); setError('') }}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 shrink-0"
-        >
-          <Plus size={18} /> Новая схема
-        </button>
+        <div className="flex flex-wrap items-center gap-2 justify-end">
+          <button
+            type="button"
+            onClick={() => setBotGuideOpen(true)}
+            className="flex items-center gap-2 border border-slate-300 bg-white text-slate-800 px-4 py-2 rounded-lg hover:bg-slate-50 hover:border-slate-400 transition shrink-0 text-sm font-medium shadow-sm"
+          >
+            <HelpCircle size={18} className="text-blue-600" strokeWidth={2} />
+            Как создать бота?
+          </button>
+          <button
+            type="button"
+            onClick={() => { setCreating(true); setError('') }}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 shrink-0 text-sm font-medium"
+          >
+            <Plus size={18} /> Новая схема
+          </button>
+        </div>
       </PageHeader>
+
+      {botGuideOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/55 backdrop-blur-md"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bot-guide-title"
+          onClick={() => setBotGuideOpen(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-[0_25px_80px_-12px_rgba(15,23,42,0.45)] max-w-xl w-full border border-slate-200/80 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative overflow-hidden px-6 pt-6 pb-5 bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 text-white">
+              <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-blue-500/20 blur-3xl" aria-hidden />
+              <div className="pointer-events-none absolute -bottom-8 -left-8 h-40 w-40 rounded-full bg-indigo-500/15 blur-2xl" aria-hidden />
+              <div className="relative flex items-start justify-between gap-4">
+                <div className="flex items-start gap-4 min-w-0">
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25 shadow-inner backdrop-blur-sm">
+                    <BotIcon className="h-7 w-7 text-white" strokeWidth={2} />
+                  </span>
+                  <div>
+                    <h2 id="bot-guide-title" className="text-xl font-semibold tracking-tight text-white">
+                      Как создать бота в Telegram
+                    </h2>
+                    <p className="mt-1.5 text-sm text-blue-100/90 leading-snug">
+                      Пошагово: от @BotFather до привязки к схеме в МедЛогике
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setBotGuideOpen(false)}
+                  className="shrink-0 rounded-xl p-2 text-blue-100/90 hover:bg-white/10 hover:text-white transition"
+                  aria-label="Закрыть"
+                >
+                  <X className="h-5 w-5" strokeWidth={2} />
+                </button>
+              </div>
+            </div>
+
+            <div className="px-5 py-5 max-h-[min(70vh,520px)] overflow-y-auto bg-gradient-to-b from-slate-50/80 to-white">
+              <ol className="space-y-4 list-none">
+                {[
+                  {
+                    n: 1,
+                    title: 'Откройте BotFather',
+                    body: (
+                      <>
+                        В Telegram найдите официального бота{' '}
+                        <a
+                          href="https://t.me/BotFather"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-blue-700 hover:underline"
+                        >
+                          @BotFather
+                        </a>
+                        {' '}и нажмите «Запустить» (или отправьте команду <kbd className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-800 text-xs font-mono">/start</kbd>).
+                      </>
+                    ),
+                  },
+                  {
+                    n: 2,
+                    title: 'Создайте нового бота',
+                    body: (
+                      <>
+                        Отправьте команду <kbd className="px-1.5 py-0.5 rounded bg-slate-200 text-slate-800 text-xs font-mono">/newbot</kbd>
+                        . Укажите отображаемое имя бота и уникальный username — он должен заканчиваться на <span className="font-mono text-slate-800">bot</span> (например, <span className="font-mono">my_clinic_algo_bot</span>).
+                      </>
+                    ),
+                  },
+                  {
+                    n: 3,
+                    title: 'Сохраните токен',
+                    body: 'После успешного создания BotFather пришлёт токен вида 123456789:AAH… — это секретный ключ. Не публикуйте его в открытых чатах и храните только для настройки МедЛогики.',
+                  },
+                  {
+                    n: 4,
+                    title: 'Привяжите бота к схеме',
+                    body: 'На этой странице выберите нужную схему диагностики. В блоке «Telegram-бот» вставьте токен в поле и сохраните. Одна схема — один бот: при необходимости создайте отдельных ботов через BotFather для других схем.',
+                  },
+                  {
+                    n: 5,
+                    title: 'Проверьте работу',
+                    body: 'Дождитесь статуса «работает» (или аналогичного в интерфейсе), затем откройте бота по ссылке t.me/ваш_username и пройдите диалог — логика совпадает с выбранной схемой.',
+                  },
+                ].map(({ n, title, body }) => (
+                  <li key={n} className="flex gap-3.5">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 text-white text-sm font-bold shadow-md shadow-blue-600/25">
+                      {n}
+                    </span>
+                    <div className="min-w-0 pt-0.5">
+                      <div className="text-sm font-semibold text-slate-900">{title}</div>
+                      <div className="mt-1 text-sm text-slate-600 leading-relaxed">{body}</div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-200/90 bg-slate-50/90">
+              <button
+                type="button"
+                onClick={() => setBotGuideOpen(false)}
+                className="inline-flex items-center justify-center rounded-xl px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-200/60 transition"
+              >
+                Закрыть
+              </button>
+              <button
+                type="button"
+                onClick={() => setBotGuideOpen(false)}
+                className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/25 hover:from-blue-500 hover:to-indigo-600 transition"
+              >
+                Понятно
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-3">
         {schemas.map(s => {

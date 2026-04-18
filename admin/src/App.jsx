@@ -150,11 +150,17 @@ function Layout({ children, onLogout }) {
       <nav className="w-64 bg-gray-900 text-white flex flex-col shrink-0">
         <div className="p-6 border-b border-gray-700">
           <div className="flex flex-col items-center text-center">
-            <img
-              src="/logo-w.png"
-              alt="МедЛогика"
-              className="h-28 w-auto max-w-[220px] object-contain mx-auto"
-            />
+            <Link
+              to="/"
+              className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 hover:opacity-95 transition-opacity"
+              title="На главную"
+            >
+              <img
+                src="/logo-w.png"
+                alt="МедЛогика"
+                className="h-28 w-auto max-w-[220px] object-contain mx-auto"
+              />
+            </Link>
             <h1 className="text-lg font-semibold text-white mt-4 tracking-tight">МедЛогика</h1>
             <p className="text-gray-400 text-xs mt-2 leading-snug px-1">
               Инструменты для принятия врачебных решений
