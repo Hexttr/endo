@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { fetchNodes, fetchSections, createNode, deleteNode } from '../api'
-import { Plus, Trash2, Search, X } from 'lucide-react'
+import { Plus, Trash2, Search, X, List } from 'lucide-react'
+import { PageHeader } from '../components/PageHeader'
 
 export default function NodeList() {
   const navigate = useNavigate()
@@ -74,9 +75,8 @@ export default function NodeList() {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h1 className="text-2xl font-bold">Узлы дерева ({nodes.length})</h1>
-        <div className="flex items-center gap-3">
+      <PageHeader icon={List} title={`Узлы дерева (${nodes.length})`}>
+        <div className="flex items-center gap-3 flex-wrap justify-end">
           <select
             value={selectedSection}
             onChange={(e) => setSelectedSection(e.target.value)}
@@ -103,7 +103,7 @@ export default function NodeList() {
             Создать узел
           </button>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Create modal */}
       {showCreate && (

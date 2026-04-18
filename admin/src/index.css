@@ -47,3 +47,26 @@ body {
 .react-flow__node-default.selectable:focus-visible {
   box-shadow: none !important;
 }
+
+/* TreeView: список узлов слева — кастомный скроллбар (WebKit + Firefox) */
+.tree-sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #93c5fd #f1f5f9;
+}
+.tree-sidebar-scroll::-webkit-scrollbar {
+  width: 9px;
+}
+.tree-sidebar-scroll::-webkit-scrollbar-track {
+  background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+  border-radius: 9999px;
+  margin: 4px 0;
+}
+.tree-sidebar-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #3b82f6 0%, #6366f1 100%);
+  border-radius: 9999px;
+  border: 2px solid #f1f5f9;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.tree-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #2563eb 0%, #4f46e5 100%);
+}

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { fetchSessions } from '../api'
+import { Users } from 'lucide-react'
+import { PageHeader } from '../components/PageHeader'
 
 const STATUS_COLORS = {
   active: 'bg-blue-100 text-blue-700',
@@ -19,8 +21,7 @@ export default function SessionsList() {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Сессии бота ({sessions.length})</h1>
+      <PageHeader icon={Users} title={`Сессии бота (${sessions.length})`}>
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -32,7 +33,7 @@ export default function SessionsList() {
           <option value="completed">Завершённые</option>
           <option value="abandoned">Прерванные</option>
         </select>
-      </div>
+      </PageHeader>
 
       <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
         <table className="w-full">

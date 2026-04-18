@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchFinals } from '../api'
+import { FileText } from 'lucide-react'
+import { PageHeader } from '../components/PageHeader'
 
 export default function FinalsList() {
   const [finals, setFinals] = useState([])
@@ -11,7 +13,7 @@ export default function FinalsList() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6">Финальные диагнозы ({finals.length})</h1>
+      <PageHeader icon={FileText} title={`Финальные диагнозы (${finals.length})`} />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {finals.map((f) => (
           <Link

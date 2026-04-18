@@ -4,7 +4,8 @@ import {
   fetchNode, updateNode, fetchNodes, fetchFinals, fetchEdges,
   createOption, updateOption, deleteOption,
 } from '../api'
-import { ArrowLeft, Save, Map, Plus, Trash2, ExternalLink, Info } from 'lucide-react'
+import { Save, Map, Plus, Trash2, ExternalLink, Info, CircleDot } from 'lucide-react'
+import { PageHeader } from '../components/PageHeader'
 
 const INPUT_TYPE_HELP = {
   info: 'Информационный блок. Пользователь видит текст и нажимает «Далее».',
@@ -174,24 +175,28 @@ export default function NodeEditor() {
 
   return (
     <div className="p-8 max-w-5xl">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-6 flex-wrap">
-        <Link to="/tree" className="text-gray-500 hover:text-gray-700"><ArrowLeft size={20} /></Link>
-        <h1 className="text-2xl font-bold">Узел: <span className="text-blue-600">{node.id}</span></h1>
-        <span className="px-3 py-1 bg-gray-100 rounded-full text-sm" title={SECTION_LABELS[node.section] || ''}>
-          {node.section}
-        </span>
-        <button
-          onClick={() => {
-            try { sessionStorage.setItem('tree-highlight-target', nodeId) } catch {}
-            navigate('/tree')
-          }}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm hover:bg-indigo-100 transition ml-auto"
-        >
-          <Map size={15} />
-          Показать на схеме
-        </button>
-      </div>
+      <PageHeader
+        backTo="/tree"
+        icon={CircleDot}
+        title={<>Узел: <span className="text-blue-600">{node.id}</span></>}
+      >
+        <div className="flex items-center gap-3 flex-wrap justify-end">
+          <span className="px-3 py-1 bg-gray-100 rounded-full text-sm" title={SECTION_LABELS[node.section] || ''}>
+            {node.section}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              try { sessionStorage.setItem('tree-highlight-target', nodeId) } catch {}
+              navigate('/tree')
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm hover:bg-indigo-100 transition"
+          >
+            <Map size={15} />
+            Показать на схеме
+          </button>
+        </div>
+      </PageHeader>
 
       {error && <div className="bg-red-50 text-red-700 p-3 rounded-lg mb-4 text-sm">{error}</div>}
 

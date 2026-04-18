@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchNodes, fetchFinals, fetchSessions, fetchSections } from '../api'
-import { GitBranch, FileText, Users, Layers } from 'lucide-react'
+import { GitBranch, FileText, Users, Layers, LayoutDashboard } from 'lucide-react'
+import { PageHeader } from '../components/PageHeader'
 
 export default function Dashboard() {
   const [stats, setStats] = useState({ nodes: 0, finals: 0, sessions: 0, sections: [] })
@@ -31,7 +32,7 @@ export default function Dashboard() {
 
   return (
     <div className="p-8">
-      <h1 className="text-2xl font-bold mb-6">Обзор системы</h1>
+      <PageHeader icon={LayoutDashboard} title="Обзор системы" />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {cards.map((c) => (
           <Link

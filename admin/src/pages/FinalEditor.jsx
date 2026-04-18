@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { fetchFinal, updateFinal } from '../api'
-import { ArrowLeft, Save, Map } from 'lucide-react'
+import { Save, Map, FileText } from 'lucide-react'
+import { PageHeader } from '../components/PageHeader'
 
 export default function FinalEditor() {
   const { finalId } = useParams()
@@ -55,20 +56,23 @@ export default function FinalEditor() {
 
   return (
     <div className="p-8 max-w-4xl">
-      <div className="flex items-center gap-3 mb-6 flex-wrap">
-        <Link to="/finals" className="text-gray-500 hover:text-gray-700"><ArrowLeft size={20} /></Link>
-        <h1 className="text-2xl font-bold">Диагноз: <span className="text-green-700">{final_.id}</span></h1>
+      <PageHeader
+        backTo="/finals"
+        icon={FileText}
+        title={<>Диагноз: <span className="text-green-700">{final_.id}</span></>}
+      >
         <button
+          type="button"
           onClick={() => {
             try { sessionStorage.setItem('tree-highlight-target', finalId) } catch {}
             navigate('/tree')
           }}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm hover:bg-indigo-100 transition ml-auto"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm hover:bg-indigo-100 transition"
         >
           <Map size={15} />
           Показать на схеме
         </button>
-      </div>
+      </PageHeader>
 
       <div className="bg-white rounded-xl shadow-sm border p-6 space-y-5">
         {fields.map((f) => (

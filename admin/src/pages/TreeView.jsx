@@ -10,7 +10,7 @@ import dagre from 'dagre'
 import { fetchNodes, fetchEdgesGraph, fetchSections, fetchFinals, createEdge, deleteEdge, updateEdge, batchUpdatePositions, resetLayout, createOption, updateOption, deleteOption, createNode, deleteNode } from '../api'
 import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronUp,
-  HelpCircle, X, MousePointer2, Move, Link2, MousePointerClick, Trash2, Plus,
+  HelpCircle, X, MousePointer2, Move, Link2, MousePointerClick, Trash2, Plus, GitBranch,
 } from 'lucide-react'
 
 const SECTION_COLORS = {
@@ -994,7 +994,12 @@ function TreeViewInner() {
     <div className="h-screen flex flex-col overflow-hidden" onClick={() => setContextMenu(null)}>
       {/* Toolbar */}
       <div className="bg-white border-b px-4 py-3 flex items-center gap-3 flex-wrap">
-        <h1 className="text-lg font-bold whitespace-nowrap">Дерево</h1>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 text-blue-700 ring-1 ring-blue-100/80 shadow-sm">
+            <GitBranch className="h-5 w-5" strokeWidth={2} />
+          </span>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight whitespace-nowrap">Дерево</h1>
+        </div>
         <select
           value={selectedSection}
           onChange={(e) => setSelectedSection(e.target.value)}
@@ -1040,7 +1045,7 @@ function TreeViewInner() {
 
       <div className="flex-1 flex min-h-0">
         {/* Sidebar */}
-        <div className="w-72 bg-white border-r overflow-y-auto text-xs">
+        <div className="tree-sidebar-scroll w-72 bg-white border-r overflow-y-auto text-xs">
           {filteredNodes.map(n => (
             <Link key={n.id} to={`/nodes/${n.id}`}
               className={`block px-3 py-2 border-b hover:bg-gray-50 transition ${n.id === highlightId ? 'bg-yellow-50 border-l-4 border-l-yellow-500' : ''}`}
@@ -1168,7 +1173,7 @@ function TreeViewInner() {
           <button
             type="button"
             onClick={() => setHelpOpen(true)}
-            className="group absolute bottom-28 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 text-white shadow-[0_10px_40px_-6px_rgba(37,99,235,0.65),0_4px_12px_-2px_rgba(30,64,175,0.45)] ring-[3px] ring-white/95 ring-offset-2 ring-offset-slate-100/90 hover:shadow-[0_14px_44px_-4px_rgba(59,130,246,0.7),0_6px_16px_-2px_rgba(30,64,175,0.5)] hover:from-blue-500 hover:via-blue-600 hover:to-indigo-700 hover:scale-[1.06] active:scale-[0.98] transition-all duration-200 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-400/80 focus-visible:ring-offset-2"
+            className="group fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 text-white shadow-[0_10px_40px_-6px_rgba(37,99,235,0.65),0_4px_12px_-2px_rgba(30,64,175,0.45)] hover:shadow-[0_14px_44px_-4px_rgba(59,130,246,0.7),0_6px_16px_-2px_rgba(30,64,175,0.5)] hover:from-blue-500 hover:via-blue-600 hover:to-indigo-700 hover:scale-[1.06] active:scale-[0.98] transition-all duration-200 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-400/80 focus-visible:ring-offset-2"
             aria-label="Подсказки по работе с деревом"
             title="Подсказки по дереву"
           >

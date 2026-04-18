@@ -153,10 +153,12 @@ function Layout({ children, onLogout }) {
             <img
               src="/logo-w.png"
               alt="МедЛогика"
-              className="h-20 w-auto max-w-[200px] object-contain mx-auto"
+              className="h-28 w-auto max-w-[220px] object-contain mx-auto"
             />
             <h1 className="text-lg font-semibold text-white mt-4 tracking-tight">МедЛогика</h1>
-            <p className="text-gray-400 text-xs mt-1.5 leading-snug">Управление логикой бота</p>
+            <p className="text-gray-400 text-xs mt-2 leading-snug px-1">
+              Инструменты для принятия врачебных решений
+            </p>
           </div>
         </div>
         <SchemaSwitcher />

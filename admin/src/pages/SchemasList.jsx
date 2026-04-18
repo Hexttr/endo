@@ -6,8 +6,9 @@ import {
 } from '../api'
 import {
   GitBranch, Copy, Trash2, Plus, Edit3, Check, X,
-  Bot as BotIcon, Eye, EyeOff, AlertCircle, Power,
+  Bot as BotIcon, Eye, EyeOff, AlertCircle, Power, Layers,
 } from 'lucide-react'
+import { PageHeader } from '../components/PageHeader'
 
 const SLUG_RE = /^[a-z0-9][a-z0-9_-]{1,49}$/
 
@@ -99,21 +100,18 @@ export default function SchemasList() {
 
   return (
     <div className="p-6 max-w-5xl">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Схемы диагностики</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Каждая схема — независимое дерево узлов и диагнозов.
-            Можно привязать отдельного Telegram-бота к каждой схеме.
-          </p>
-        </div>
+      <PageHeader
+        icon={Layers}
+        title="Схемы диагностики"
+        subtitle="Каждая схема — независимое дерево узлов и диагнозов. Можно привязать отдельного Telegram-бота к каждой схеме."
+      >
         <button
           onClick={() => { setCreating(true); setError('') }}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 shrink-0"
         >
           <Plus size={18} /> Новая схема
         </button>
-      </div>
+      </PageHeader>
 
       <div className="grid gap-3">
         {schemas.map(s => {

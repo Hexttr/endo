@@ -5,6 +5,7 @@ import {
   Play, RefreshCcw, User, Bot as BotIcon, AlertCircle, CheckCircle2,
   HelpCircle, ChevronRight, Loader2,
 } from 'lucide-react'
+import { PageHeader } from '../components/PageHeader'
 
 /**
  * In-browser simulation of the Telegram bot, scoped to the currently active
@@ -173,21 +174,17 @@ export default function Playground() {
     <div className="flex h-full">
       <div className="flex-1 flex flex-col bg-white">
         <div className="px-6 py-4 border-b bg-gradient-to-r from-blue-50 to-indigo-50">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold flex items-center gap-2">
-                <Play size={20} className="text-blue-600" />
-                Playground — симуляция бота
-              </h1>
-              <p className="text-sm text-gray-600 mt-1">
-                Схема: <b>{activeSchema?.name || schemaId}</b> ·
-                Те же эндпоинты, что у Telegram-бота — реальное поведение.
-              </p>
-            </div>
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <PageHeader
+              className="mb-0 flex-1 min-w-0"
+              icon={Play}
+              title="Playground — симуляция бота"
+              subtitle={`Схема: ${activeSchema?.name || schemaId}. Те же эндпоинты, что у Telegram-бота — реальное поведение.`}
+            />
             <button
               onClick={startSession}
               disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-white border hover:bg-gray-50 rounded-lg shadow-sm text-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-white border hover:bg-gray-50 rounded-lg shadow-sm text-sm shrink-0"
             >
               <RefreshCcw size={14} /> Начать заново
             </button>
