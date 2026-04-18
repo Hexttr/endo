@@ -6,7 +6,8 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import dagre from 'dagre'
-import { fetchNodes, fetchEdgesGraph, fetchSections, fetchFinals, createEdge, deleteEdge, updateEdge } from '../api'
+import { fetchNodes, fetchEdgesGraph, fetchSections, fetchFinals, createEdge, deleteEdge, updateEdge, batchUpdatePositions, resetLayout, createOption, updateOption, deleteOption, createNode, deleteNode } from '../api'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react'
 
 const SECTION_COLORS = {
   branch_a: { bg: '#fef2f2', border: '#f87171', badge: '#dc2626' },
@@ -28,7 +29,8 @@ const SECTION_COLORS = {
 const NODE_W = 240
 const NODE_H = 70
 
-function layoutGraph(rawNodes, rawEdges) {
+function layoutGraph(rawNodes, rawEdges, pinned) {
+  // pinned is a Map<nodeId, {x, y}> of user-dragged positions that override dagre.
   const g = new dagre.graphlib.Graph()
   g.setDefaultEdgeLabel(() => ({}))
   g.setGraph({ rankdir: 'TB', nodesep: 40, ranksep: 80, edgesep: 20 })
@@ -38,6 +40,8 @@ function layoutGraph(rawNodes, rawEdges) {
   })
   dagre.layout(g)
   return rawNodes.map(n => {
+    const p = pinned?.get(n.id)
+    if (p) return { ...n, position: { x: p.x, y: p.y } }
     const pos = g.node(n.id)
     if (!pos) return { ...n, position: { x: 0, y: 0 } }
     return { ...n, position: { x: pos.x - NODE_W / 2, y: pos.y - NODE_H / 2 } }
@@ -82,7 +86,22 @@ function TreeViewInner() {
   })
   const initDone = useRef(false)
   const paneRef = useRef(null)
+  // Queue of positions waiting to be flushed to the backend (debounced).
+  const pendingPositionsRef = useRef(new Map())
+  const positionFlushTimerRef = useRef(null)
   const [rfReady, setRfReady] = useState(false)
+  // When true, the graph pane gets the `rf-animating` class which enables a
+  // short CSS transition on node `transform`. We flip it on for ~320ms around
+  // explicit programmatic layout changes (reset, create node, schema reload)
+  // and keep it off during drag — transitions during drag cause the node to
+  // visibly lag behind the cursor.
+  const [layoutAnimating, setLayoutAnimating] = useState(false)
+  const layoutAnimTimerRef = useRef(null)
+  const triggerLayoutAnim = useCallback(() => {
+    setLayoutAnimating(true)
+    if (layoutAnimTimerRef.current) clearTimeout(layoutAnimTimerRef.current)
+    layoutAnimTimerRef.current = setTimeout(() => setLayoutAnimating(false), 320)
+  }, [])
   // Force "fit all" on genuine page reloads (F5 / Ctrl+R). SPA navigation
   // within the admin keeps the saved viewport so returning from an editor
   // lands the user exactly where they were.
@@ -173,17 +192,30 @@ function TreeViewInner() {
     filteredNodes.forEach(n => {
       (n.options || []).forEach(opt => {
         if (!opt.next_node_id || !allVisible.has(opt.next_node_id)) return
+        const isPlaceholder = opt.label?.startsWith('\u2192 ') && opt.label?.includes('(переименуйте)')
         raw.push({
           id: `opt-${n.id}-${opt.next_node_id}-${opt.option_id}`,
           source: n.id,
           target: opt.next_node_id,
           label: showLabels ? opt.label.substring(0, 25) : '',
-          style: { stroke: '#c4b5fd', strokeWidth: 1 },
+          style: {
+            stroke: isPlaceholder ? '#9ca3af' : '#c4b5fd',
+            strokeWidth: 1,
+            strokeDasharray: isPlaceholder ? '4 4' : undefined,
+          },
           labelStyle: { fontSize: 8, fill: '#6b7280' },
           labelBgStyle: { fill: '#fff', fillOpacity: 0.9 },
           labelBgPadding: [2, 1],
           type: 'smoothstep',
-          data: { kind: 'option' },
+          data: {
+            kind: 'option',
+            nodeId: n.id,
+            optionDbId: opt.id,
+            optionId: opt.option_id,
+            label: opt.label,
+            nextNodeId: opt.next_node_id,
+            placeholder: isPlaceholder,
+          },
         })
       })
     })
@@ -214,16 +246,192 @@ function TreeViewInner() {
   }, [navigate])
 
   const onConnect = useCallback(async (params) => {
+    // On drag-connect we do TWO things:
+    //   1. Create the visualisation edge (graph structure).
+    //   2. Create a placeholder Option on the source node — without this the
+    //      bot will never let users reach the target.
+    // Finals (green nodes) can't have outgoing options, so we skip step 2 for
+    // them. Same if source doesn't exist in `filteredNodes` (e.g. a final).
+    const sourceNode = filteredNodes.find(n => n.id === params.source)
+    const isSourceFinal = !sourceNode // final diagnoses live in a separate list
     try {
       await createEdge({ from_node_id: params.source, to_node_id: params.target })
+      if (!isSourceFinal) {
+        // Generate a unique option_id by appending a numeric suffix to avoid
+        // clashing with existing options.
+        const existing = (sourceNode?.options || []).map(o => o.option_id)
+        let suffix = existing.length + 1
+        let optId = `auto_${suffix}`
+        while (existing.includes(optId)) {
+          suffix += 1
+          optId = `auto_${suffix}`
+        }
+        try {
+          await createOption(params.source, {
+            option_id: optId,
+            label: `\u2192 ${params.target} (переименуйте)`,
+            next_node_id: params.target,
+          })
+        } catch (optErr) {
+          console.warn('Failed to create placeholder option:', optErr)
+        }
+      }
       await loadEdges()
-      setToast(`Связь ${params.source} → ${params.target} создана`)
+      // Reload nodes so the new option appears in sourceNode.options for
+      // subsequent connects / counters.
+      fetchNodes(selectedSection || undefined).then(setNodes).catch(() => {})
+      setToast(
+        isSourceFinal
+          ? `Связь создана (${params.source} — диагноз, опция не добавлена)`
+          : `Связь + опция созданы. Откройте узел ${params.source} чтобы переименовать кнопку`,
+      )
+      setTimeout(() => setToast(''), 5000)
+    } catch (e) {
+      setToast(`Ошибка: ${e.message}`)
+      setTimeout(() => setToast(''), 4000)
+    }
+  }, [filteredNodes, selectedSection])
+
+  // Drag & drop node positioning: on each drag-stop we queue the new position
+  // and flush the whole queue after a short quiet period. Debounce prevents
+  // one PATCH per dragged node when the user re-arranges many in a row.
+  const flushPositionsNow = useCallback(async () => {
+    if (pendingPositionsRef.current.size === 0) return
+    const payload = Array.from(pendingPositionsRef.current.values())
+    pendingPositionsRef.current.clear()
+    try {
+      await batchUpdatePositions(payload)
+      // Refresh local `nodes` so the next dagre pass sees these as pinned.
+      // (We only patch the ones we just sent — no full re-fetch needed.)
+      setNodes(prev => prev.map(n => {
+        const p = payload.find(q => q.id === n.id)
+        if (!p) return n
+        return { ...n, position_x: p.position_x, position_y: p.position_y, layout_manual: true }
+      }))
+    } catch (e) {
+      console.warn('Failed to save positions:', e)
+      setToast(`Ошибка сохранения позиций: ${e.message}`)
+      setTimeout(() => setToast(''), 4000)
+    }
+  }, [])
+
+  const onNodeDragStop = useCallback((_, node) => {
+    // Skip the red bounds frame and any non-interactive helpers.
+    if (node?.data?.isBounds) return
+    if (!node?.id) return
+    // Reject positions for finals — finals aren't in the nodes table.
+    // (Optional: later could add position to finals too; for now regular nodes only.)
+    const isRegular = !node?.data?.isFinal
+    if (!isRegular) return
+    // Commit the position to local state IMMEDIATELY so the next render hands
+    // the same coordinates to ReactFlow. Without this, any unrelated re-render
+    // (e.g. `toast` change, highlight, edge refetch) before the debounced save
+    // completes would make RF re-sync from the STALE `position_x/y` props and
+    // visibly snap the node back to its pre-drag spot.
+    setNodes(prev => prev.map(n =>
+      n.id === node.id
+        ? { ...n, position_x: node.position.x, position_y: node.position.y, layout_manual: true }
+        : n
+    ))
+    pendingPositionsRef.current.set(node.id, {
+      id: node.id,
+      position_x: node.position.x,
+      position_y: node.position.y,
+      layout_manual: true,
+    })
+    if (positionFlushTimerRef.current) clearTimeout(positionFlushTimerRef.current)
+    positionFlushTimerRef.current = setTimeout(flushPositionsNow, 400)
+  }, [flushPositionsNow])
+
+  // Schema audit — purely front-end analysis of the currently loaded data.
+  // Runs on every change so the panel updates live while the user edits.
+  const audit = useMemo(() => {
+    const nodeIds = new Set(nodes.map(n => n.id))
+    const finalIdSet = new Set(finals.map(f => f.id))
+    const valid = new Set([...nodeIds, ...finalIdSet])
+
+    const deadEnds = []     // non-terminal nodes with no options and no edges
+    const brokenRefs = []   // options / edges pointing to a non-existent target
+    const reachable = new Set()
+
+    // BFS from conventional root(s): N000 if present, else nodes with no incoming refs.
+    const inbound = new Map()   // id -> count of incoming pointers
+    nodes.forEach(n => inbound.set(n.id, 0))
+    finals.forEach(f => inbound.set(f.id, 0))
+    nodes.forEach(n => {
+      let outgoing = 0
+      ;(n.options || []).forEach(opt => {
+        if (!opt.next_node_id) return
+        outgoing += 1
+        if (!valid.has(opt.next_node_id)) {
+          brokenRefs.push({ from: n.id, to: opt.next_node_id, kind: 'option', label: opt.label })
+        } else {
+          inbound.set(opt.next_node_id, (inbound.get(opt.next_node_id) || 0) + 1)
+        }
+      })
+      allEdges.forEach(e => {
+        if (e.from_node_id === n.id) outgoing += 1
+      })
+      if (!n.is_terminal && !n.is_pending && outgoing === 0) {
+        deadEnds.push(n.id)
+      }
+    })
+    allEdges.forEach(e => {
+      if (!valid.has(e.to_node_id)) {
+        brokenRefs.push({ from: e.from_node_id, to: e.to_node_id, kind: 'edge', label: e.label })
+      } else {
+        inbound.set(e.to_node_id, (inbound.get(e.to_node_id) || 0) + 1)
+      }
+    })
+
+    const roots = nodeIds.has('N000') ? ['N000']
+      : nodes.filter(n => (inbound.get(n.id) || 0) === 0).map(n => n.id)
+    const adj = new Map()
+    nodes.forEach(n => {
+      const targets = new Set()
+      ;(n.options || []).forEach(opt => {
+        if (opt.next_node_id) targets.add(opt.next_node_id)
+      })
+      allEdges.forEach(e => { if (e.from_node_id === n.id) targets.add(e.to_node_id) })
+      adj.set(n.id, targets)
+    })
+    const queue = [...roots]
+    roots.forEach(r => reachable.add(r))
+    while (queue.length) {
+      const id = queue.shift()
+      const targets = adj.get(id) || new Set()
+      targets.forEach(t => {
+        if (!reachable.has(t)) {
+          reachable.add(t)
+          if (!finalIdSet.has(t)) queue.push(t)
+        }
+      })
+    }
+    const unreachableNodes = nodes.filter(n => !reachable.has(n.id) && !roots.includes(n.id)).map(n => n.id)
+    const orphanFinals = finals.filter(f => !reachable.has(f.id)).map(f => f.id)
+
+    return {
+      ok: deadEnds.length === 0 && brokenRefs.length === 0 && unreachableNodes.length === 0 && orphanFinals.length === 0,
+      deadEnds, brokenRefs, unreachableNodes, orphanFinals,
+      totals: { nodes: nodes.length, finals: finals.length },
+    }
+  }, [nodes, finals, allEdges])
+
+  const handleResetLayout = useCallback(async () => {
+    if (!confirm('Сбросить ручную раскладку всех узлов? Авто-раскладка dagre вернётся.')) return
+    try {
+      await resetLayout()
+      triggerLayoutAnim()
+      setNodes(prev => prev.map(n => ({
+        ...n, position_x: null, position_y: null, layout_manual: false,
+      })))
+      setToast('Раскладка сброшена')
       setTimeout(() => setToast(''), 3000)
     } catch (e) {
       setToast(`Ошибка: ${e.message}`)
       setTimeout(() => setToast(''), 4000)
     }
-  }, [])
+  }, [triggerLayoutAnim])
 
   const onEdgeContextMenu = useCallback((event, edge) => {
     event.preventDefault()
@@ -256,16 +464,107 @@ function TreeViewInner() {
   }
 
   const handleEdgeEditLabel = () => {
-    setEditingEdgeLabel({ edgeId: contextMenu.edgeId, label: contextMenu.label })
+    setEditingEdgeLabel({ kind: 'db_edge', edgeId: contextMenu.edgeId, label: contextMenu.label })
     setContextMenu(null)
   }
+
+  const onEdgeDoubleClick = useCallback((event, edge) => {
+    event?.stopPropagation?.()
+    if (edge.data?.kind === 'option') {
+      setEditingEdgeLabel({
+        kind: 'option',
+        nodeId: edge.data.nodeId,
+        optionDbId: edge.data.optionDbId,
+        label: edge.data.label || '',
+        nextNodeId: edge.data.nextNodeId || '',
+      })
+    } else if (edge.data?.kind === 'db_edge') {
+      setEditingEdgeLabel({
+        kind: 'db_edge',
+        edgeId: edge.data.dbId,
+        label: edge.data.dbLabel || '',
+      })
+    }
+  }, [])
 
   const handleEdgeLabelSave = async () => {
     if (!editingEdgeLabel) return
     try {
-      await updateEdge(editingEdgeLabel.edgeId, { label: editingEdgeLabel.label || null })
-      await loadEdges()
-      setToast('Подпись обновлена')
+      if (editingEdgeLabel.kind === 'option') {
+        await updateOption(editingEdgeLabel.nodeId, editingEdgeLabel.optionDbId, {
+          label: editingEdgeLabel.label || '',
+        })
+        fetchNodes(selectedSection || undefined).then(setNodes).catch(() => {})
+        setToast('Текст кнопки обновлён')
+      } else {
+        await updateEdge(editingEdgeLabel.edgeId, { label: editingEdgeLabel.label || null })
+        await loadEdges()
+        setToast('Подпись обновлена')
+      }
+      setTimeout(() => setToast(''), 3000)
+    } catch (e) {
+      setToast(`Ошибка: ${e.message}`)
+      setTimeout(() => setToast(''), 4000)
+    }
+    setEditingEdgeLabel(null)
+  }
+
+  // Keyboard-triggered deletions via ReactFlow's built-in Delete key binding.
+  // Plain delete of a DB edge (blue arrow) → deleteEdge API.
+  // Delete of an option edge (purple arrow) → deleteOption API, since that's
+  // what actually drives the bot's navigation.
+  const onEdgesDelete = useCallback(async (edgesToDelete) => {
+    for (const edge of edgesToDelete) {
+      if (!edge.data) continue
+      try {
+        if (edge.data.kind === 'option') {
+          await deleteOption(edge.data.nodeId, edge.data.optionDbId)
+        } else if (edge.data.kind === 'db_edge') {
+          await deleteEdge(edge.data.dbId)
+        }
+      } catch (e) {
+        console.warn('Delete edge failed:', e)
+        setToast(`Ошибка: ${e.message}`)
+      }
+    }
+    await loadEdges()
+    fetchNodes(selectedSection || undefined).then(setNodes).catch(() => {})
+    setToast('Удалено')
+    setTimeout(() => setToast(''), 2500)
+  }, [selectedSection])
+
+  const onNodesDelete = useCallback(async (nodesToDelete) => {
+    for (const node of nodesToDelete) {
+      if (node.data?.isBounds || node.data?.isFinal) continue
+      try {
+        await deleteNode(node.id)
+      } catch (e) {
+        console.warn('Delete node failed:', e)
+        setToast(`Ошибка: ${e.message}`)
+      }
+    }
+    await loadEdges()
+    fetchNodes(selectedSection || undefined).then(setNodes).catch(() => {})
+    setToast('Узел удалён')
+    setTimeout(() => setToast(''), 2500)
+  }, [selectedSection])
+
+  const handleEdgeItemDelete = async () => {
+    if (!editingEdgeLabel) return
+    const msg = editingEdgeLabel.kind === 'option'
+      ? 'Удалить вариант ответа? Пользователи больше не смогут выбрать этот путь в боте.'
+      : 'Удалить связь?'
+    if (!confirm(msg)) return
+    try {
+      if (editingEdgeLabel.kind === 'option') {
+        await deleteOption(editingEdgeLabel.nodeId, editingEdgeLabel.optionDbId)
+        fetchNodes(selectedSection || undefined).then(setNodes).catch(() => {})
+        setToast('Вариант удалён')
+      } else {
+        await deleteEdge(editingEdgeLabel.edgeId)
+        await loadEdges()
+        setToast('Связь удалена')
+      }
       setTimeout(() => setToast(''), 3000)
     } catch (e) {
       setToast(`Ошибка: ${e.message}`)
@@ -323,13 +622,22 @@ function TreeViewInner() {
     }
 
     if (raw.length === 0) return raw
+    // Build pinned-positions map from source data — any node that the user
+    // has manually positioned takes precedence over dagre.
+    const pinned = new Map()
+    filteredNodes.forEach(n => {
+      if (n.layout_manual && n.position_x != null && n.position_y != null) {
+        pinned.set(n.id, { x: n.position_x, y: n.position_y })
+      }
+    })
     if (flowEdges.length === 0) {
-      return raw.map((n, i) => ({
-        ...n,
-        position: { x: (i % 6) * (NODE_W + 40), y: Math.floor(i / 6) * 100 },
-      }))
+      return raw.map((n, i) => {
+        const p = pinned.get(n.id)
+        if (p) return { ...n, position: { x: p.x, y: p.y } }
+        return { ...n, position: { x: (i % 6) * (NODE_W + 40), y: Math.floor(i / 6) * 100 } }
+      })
     }
-    return layoutGraph(raw, flowEdges)
+    return layoutGraph(raw, flowEdges, pinned)
   }, [filteredNodes, finals, flowEdges, showFinals, highlightId])
 
   // Bounding box of the real graph in flow coords. Uses each node's actual
@@ -366,6 +674,50 @@ function TreeViewInner() {
       [graphBounds.maxX + bx, graphBounds.maxY + by],
     ]
   }, [graphBounds])
+
+  // N-key creates a fresh node at a sensible default position. Users can then
+  // drag it and connect it visually. Declared AFTER graphBounds to keep
+  // useCallback deps out of the temporal dead zone during render.
+  const handleCreateNewNode = useCallback(async () => {
+    const idPrompt = window.prompt('ID нового узла (латиницей, напр. B200):')
+    if (!idPrompt) return
+    const textPrompt = window.prompt('Текст вопроса:') || 'Новый узел'
+    let x = 0, y = 0
+    if (graphBounds) {
+      x = (graphBounds.minX + graphBounds.maxX) / 2
+      y = (graphBounds.minY + graphBounds.maxY) / 2
+    }
+    try {
+      await createNode({
+        id: idPrompt.trim(),
+        section: selectedSection || (nodes[0]?.section ?? 'overview'),
+        text: textPrompt,
+        input_type: 'single_choice',
+        position_x: x, position_y: y, layout_manual: true,
+      })
+      triggerLayoutAnim()
+      await fetchNodes(selectedSection || undefined).then(setNodes)
+      setToast(`Создан узел ${idPrompt.trim()}. Перетащите его и свяжите с другими.`)
+      setTimeout(() => setToast(''), 4000)
+    } catch (e) {
+      setToast(`Ошибка: ${e.message}`)
+      setTimeout(() => setToast(''), 4000)
+    }
+  }, [graphBounds, selectedSection, nodes, triggerLayoutAnim])
+
+  useEffect(() => {
+    const handler = (e) => {
+      const target = e.target
+      const tag = target?.tagName?.toLowerCase()
+      if (tag === 'input' || tag === 'textarea' || target?.isContentEditable) return
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault()
+        handleCreateNewNode()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [handleCreateNewNode])
 
   // Dynamic minimum zoom: the user cannot zoom out past "whole graph
   // visible with a small padding". The red frame plus translateExtent
@@ -551,6 +903,13 @@ function TreeViewInner() {
           <input type="checkbox" checked={showLabels} onChange={(e) => setShowLabels(e.target.checked)} className="rounded" />
           Подписи рёбер
         </label>
+        <button
+          onClick={handleResetLayout}
+          className="px-2 py-1.5 text-xs rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-700"
+          title="Сбросить ручную раскладку и вернуть авто-layout"
+        >
+          Сбросить раскладку
+        </button>
         <span className="text-gray-400 text-xs ml-auto">
           {flowNodes.length} узлов &middot; {flowEdges.length} связей
           {highlightId && <span className="ml-2 text-yellow-600 font-semibold">Выделен: {highlightId}</span>}
@@ -592,7 +951,7 @@ function TreeViewInner() {
         </div>
 
         {/* Graph */}
-        <div ref={paneRef} className="flex-1 relative">
+        <div ref={paneRef} className={`flex-1 relative ${layoutAnimating ? 'rf-animating' : ''}`}>
           <ReactFlow
             nodes={flowNodes}
             edges={flowEdges}
@@ -600,9 +959,14 @@ function TreeViewInner() {
             nodesDraggable={true}
             onInit={onInit}
             onNodeDoubleClick={onNodeDoubleClick}
+            onNodeDragStop={onNodeDragStop}
             onConnect={onConnect}
+            onEdgeDoubleClick={onEdgeDoubleClick}
             onEdgeContextMenu={onEdgeContextMenu}
             onMoveEnd={onMoveEnd}
+            onEdgesDelete={onEdgesDelete}
+            onNodesDelete={onNodesDelete}
+            deleteKeyCode={['Delete', 'Backspace']}
             minZoom={dynMinZoom}
             maxZoom={3}
             translateExtent={translateExtent}
@@ -643,38 +1007,184 @@ function TreeViewInner() {
             </div>
           )}
 
-          {/* Edge label edit modal */}
+          {/* Edge / option label edit modal */}
           {editingEdgeLabel && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={() => setEditingEdgeLabel(null)}>
-              <div className="bg-white rounded-xl shadow-2xl p-6 w-96" onClick={(e) => e.stopPropagation()}>
-                <h3 className="font-semibold mb-3">Подпись связи</h3>
+              <div className="bg-white rounded-xl shadow-2xl p-6 w-[28rem]" onClick={(e) => e.stopPropagation()}>
+                <h3 className="font-semibold mb-1">
+                  {editingEdgeLabel.kind === 'option' ? 'Текст кнопки (вариант ответа в боте)' : 'Подпись связи'}
+                </h3>
+                {editingEdgeLabel.kind === 'option' && (
+                  <p className="text-xs text-gray-500 mb-3">
+                    Узел {editingEdgeLabel.nodeId} &rarr; {editingEdgeLabel.nextNodeId}. Этот текст пользователь увидит на кнопке в Telegram-боте.
+                  </p>
+                )}
                 <input
                   type="text"
                   value={editingEdgeLabel.label}
                   onChange={(e) => setEditingEdgeLabel({ ...editingEdgeLabel, label: e.target.value })}
                   className="w-full border rounded-lg px-3 py-2 mb-4"
-                  placeholder="Подпись (или оставить пустым)"
+                  placeholder={editingEdgeLabel.kind === 'option' ? 'Например: Да / Нет / Форрест Ia' : 'Подпись (или оставить пустым)'}
                   autoFocus
                   onKeyDown={(e) => e.key === 'Enter' && handleEdgeLabelSave()}
                 />
-                <div className="flex gap-2 justify-end">
-                  <button onClick={() => setEditingEdgeLabel(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
-                    Отмена
+                <div className="flex gap-2 justify-between">
+                  <button onClick={handleEdgeItemDelete} className="px-4 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg">
+                    Удалить
                   </button>
-                  <button onClick={handleEdgeLabelSave} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-                    Сохранить
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={() => setEditingEdgeLabel(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
+                      Отмена
+                    </button>
+                    <button onClick={handleEdgeLabelSave} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                      Сохранить
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
           {/* Help hint */}
-          <div className="absolute bottom-3 left-3 bg-white/90 rounded-lg px-3 py-2 text-xs text-gray-500 shadow border">
-            2x клик — редактировать &bull; Перетяните от узла к узлу — новая связь &bull; ПКМ на связи — меню
+          <div className="absolute bottom-3 left-3 bg-white/95 rounded-lg px-3 py-2 text-xs text-gray-600 shadow border max-w-[640px] leading-relaxed">
+            <b>Клик</b> по узлу — выделить (синяя рамка) &bull;
+            <b> Перетяните</b> узел — новая позиция &bull;
+            Потяните от узла к узлу — новая связь + опция &bull;
+            <b> 2× клик</b> по связи — редактировать &bull;
+            <b> Del / Backspace</b> — удалить выделенный узел или связь &bull;
+            <b> N</b> — создать узел
           </div>
+
+          {/* Live audit panel (top-right over the graph) */}
+          <AuditPanel audit={audit} />
         </div>
       </div>
+    </div>
+  )
+}
+
+function AuditPanel({ audit }) {
+  const [open, setOpen] = useState(() => {
+    // Keep the panel open if there are issues; collapse on a clean schema.
+    return !audit.ok
+  })
+  const navigate = useNavigate()
+  const focus = (id) => {
+    try { sessionStorage.setItem(HIGHLIGHT_KEY, id) } catch {}
+    // Force a soft refresh of the tree so the highlight effect re-runs.
+    window.location.href = `/tree?highlight=${encodeURIComponent(id)}`
+  }
+  const issueCount = audit.deadEnds.length + audit.brokenRefs.length + audit.unreachableNodes.length + audit.orphanFinals.length
+  return (
+    <div className="absolute top-3 right-3 bg-white/95 rounded-lg shadow-lg border w-72 text-xs">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-50 rounded-t-lg"
+      >
+        <div className="flex items-center gap-2">
+          {audit.ok ? (
+            <CheckCircle2 size={16} className="text-green-600" />
+          ) : (
+            <AlertTriangle size={16} className="text-yellow-600" />
+          )}
+          <span className="font-semibold">
+            {audit.ok
+              ? `Схема целостная (${audit.totals.nodes} узлов, ${audit.totals.finals} диагнозов)`
+              : `Найдено проблем: ${issueCount}`}
+          </span>
+        </div>
+        {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+      {open && !audit.ok && (
+        <div className="p-3 space-y-3 border-t max-h-[60vh] overflow-auto">
+          {audit.deadEnds.length > 0 && (
+            <div>
+              <div className="font-semibold text-red-700 mb-1">
+                Тупики ({audit.deadEnds.length})
+              </div>
+              <p className="text-[10px] text-gray-500 mb-1">
+                Узлы без опций и рёбер (не терминальные) — бот зависнет здесь.
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {audit.deadEnds.slice(0, 20).map(id => (
+                  <button
+                    key={id}
+                    onClick={() => focus(id)}
+                    className="font-mono bg-red-50 hover:bg-red-100 text-red-700 px-1.5 py-0.5 rounded"
+                  >
+                    {id}
+                  </button>
+                ))}
+                {audit.deadEnds.length > 20 && <span className="text-gray-400">+{audit.deadEnds.length - 20}</span>}
+              </div>
+            </div>
+          )}
+          {audit.brokenRefs.length > 0 && (
+            <div>
+              <div className="font-semibold text-orange-700 mb-1">
+                Битые ссылки ({audit.brokenRefs.length})
+              </div>
+              <p className="text-[10px] text-gray-500 mb-1">
+                Опция/ребро указывает на несуществующий узел.
+              </p>
+              <ul className="space-y-1">
+                {audit.brokenRefs.slice(0, 15).map((r, i) => (
+                  <li key={i} className="flex items-center gap-1 flex-wrap">
+                    <button onClick={() => focus(r.from)} className="font-mono text-orange-800 hover:underline">{r.from}</button>
+                    <span className="text-gray-500">→</span>
+                    <span className="font-mono text-red-600 line-through">{r.to}</span>
+                    <span className="text-gray-400 text-[10px]">({r.kind})</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {audit.unreachableNodes.length > 0 && (
+            <div>
+              <div className="font-semibold text-gray-700 mb-1">
+                Недостижимые узлы ({audit.unreachableNodes.length})
+              </div>
+              <p className="text-[10px] text-gray-500 mb-1">
+                Ни одна ветка от N000 не ведёт сюда.
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {audit.unreachableNodes.slice(0, 20).map(id => (
+                  <button
+                    key={id}
+                    onClick={() => focus(id)}
+                    className="font-mono bg-gray-100 hover:bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded"
+                  >
+                    {id}
+                  </button>
+                ))}
+                {audit.unreachableNodes.length > 20 && <span className="text-gray-400">+{audit.unreachableNodes.length - 20}</span>}
+              </div>
+            </div>
+          )}
+          {audit.orphanFinals.length > 0 && (
+            <div>
+              <div className="font-semibold text-purple-700 mb-1">
+                Диагнозы без пути ({audit.orphanFinals.length})
+              </div>
+              <p className="text-[10px] text-gray-500 mb-1">
+                К этим диагнозам нельзя прийти ни через одну опцию.
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {audit.orphanFinals.slice(0, 20).map(id => (
+                  <button
+                    key={id}
+                    onClick={() => focus(id)}
+                    className="font-mono bg-purple-50 hover:bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded"
+                  >
+                    {id}
+                  </button>
+                ))}
+                {audit.orphanFinals.length > 20 && <span className="text-gray-400">+{audit.orphanFinals.length - 20}</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

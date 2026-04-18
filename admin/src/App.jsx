@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom'
 import { isLoggedIn, logout, login } from './api'
+import { SchemaProvider, useSchemaContext } from './schema-context'
 import Dashboard from './pages/Dashboard'
 import TreeView from './pages/TreeView'
 import NodeList from './pages/NodeList'
@@ -8,7 +9,12 @@ import NodeEditor from './pages/NodeEditor'
 import FinalsList from './pages/FinalsList'
 import FinalEditor from './pages/FinalEditor'
 import SessionsList from './pages/SessionsList'
-import { LayoutDashboard, GitBranch, List, FileText, Users, LogOut } from 'lucide-react'
+import SchemasList from './pages/SchemasList'
+import Playground from './pages/Playground'
+import {
+  LayoutDashboard, GitBranch, List, FileText, Users, LogOut,
+  Layers, ChevronDown, Play,
+} from 'lucide-react'
 
 function LoginPage({ onLogin }) {
   const [username, setUsername] = useState('')
@@ -55,6 +61,52 @@ function LoginPage({ onLogin }) {
   )
 }
 
+function SchemaSwitcher() {
+  const { schemas, schemaId, switchSchema } = useSchemaContext()
+  const [open, setOpen] = useState(false)
+  const active = schemas.find(s => s.id === schemaId)
+  return (
+    <div className="relative px-4 py-3 border-b border-gray-700">
+      <button
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-left"
+        onClick={() => setOpen(o => !o)}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <Layers size={16} className="shrink-0 text-blue-300" />
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase text-gray-400 tracking-wide">Схема</div>
+            <div className="text-sm font-semibold truncate">
+              {active?.name || schemaId}
+            </div>
+          </div>
+        </div>
+        <ChevronDown size={16} className={`shrink-0 transition ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <div className="absolute left-4 right-4 top-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-20 max-h-80 overflow-auto">
+          {schemas.map(s => (
+            <button
+              key={s.id}
+              onClick={() => { setOpen(false); switchSchema(s.id) }}
+              className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-700 ${s.id === schemaId ? 'bg-gray-700 text-white' : 'text-gray-300'}`}
+            >
+              <div className="font-semibold">{s.name}</div>
+              <div className="text-[10px] text-gray-500 font-mono">{s.id}</div>
+            </button>
+          ))}
+          <Link
+            to="/schemas"
+            onClick={() => setOpen(false)}
+            className="block text-center px-3 py-2 text-sm border-t border-gray-700 text-blue-400 hover:bg-gray-700"
+          >
+            Управление схемами →
+          </Link>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Layout({ children, onLogout }) {
   const navigate = useNavigate()
   const links = [
@@ -62,7 +114,9 @@ function Layout({ children, onLogout }) {
     { to: '/tree', icon: <GitBranch size={18} />, label: 'Дерево' },
     { to: '/nodes', icon: <List size={18} />, label: 'Узлы' },
     { to: '/finals', icon: <FileText size={18} />, label: 'Диагнозы' },
+    { to: '/playground', icon: <Play size={18} />, label: 'Playground' },
     { to: '/sessions', icon: <Users size={18} />, label: 'Сессии' },
+    { to: '/schemas', icon: <Layers size={18} />, label: 'Схемы' },
   ]
 
   return (
@@ -72,7 +126,8 @@ function Layout({ children, onLogout }) {
           <h1 className="text-lg font-bold">Endo Bot Admin</h1>
           <p className="text-gray-400 text-xs mt-1">Управление логикой бота</p>
         </div>
-        <div className="flex-1 py-4">
+        <SchemaSwitcher />
+        <div className="flex-1 py-4 overflow-auto">
           {links.map((l) => (
             <Link
               key={l.to}
@@ -111,18 +166,22 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Layout onLogout={handleLogout}>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/tree" element={<TreeView />} />
-          <Route path="/nodes" element={<NodeList />} />
-          <Route path="/nodes/:nodeId" element={<NodeEditor />} />
-          <Route path="/finals" element={<FinalsList />} />
-          <Route path="/finals/:finalId" element={<FinalEditor />} />
-          <Route path="/sessions" element={<SessionsList />} />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </Layout>
+      <SchemaProvider>
+        <Layout onLogout={handleLogout}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/tree" element={<TreeView />} />
+            <Route path="/nodes" element={<NodeList />} />
+            <Route path="/nodes/:nodeId" element={<NodeEditor />} />
+            <Route path="/finals" element={<FinalsList />} />
+            <Route path="/finals/:finalId" element={<FinalEditor />} />
+            <Route path="/sessions" element={<SessionsList />} />
+            <Route path="/schemas" element={<SchemasList />} />
+            <Route path="/playground" element={<Playground />} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </Layout>
+      </SchemaProvider>
     </BrowserRouter>
   )
 }

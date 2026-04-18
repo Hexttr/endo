@@ -4,6 +4,35 @@ from typing import Optional, Any
 from datetime import datetime
 
 
+# ── Schemas (decision-tree schema registry) ───────────────────────
+
+class SchemaRead(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SchemaCreate(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+
+
+class SchemaUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+
+
+class SchemaClone(BaseModel):
+    new_id: str
+    new_name: str
+    description: Optional[str] = None
+
+
 class OptionRead(BaseModel):
     id: int
     option_id: str
@@ -44,6 +73,9 @@ class NodeRead(BaseModel):
     return_node: Optional[str] = None
     allow_multiple: bool = False
     extra: Optional[dict] = None
+    position_x: Optional[float] = None
+    position_y: Optional[float] = None
+    layout_manual: bool = False
     options: list[OptionRead] = []
 
     class Config:
@@ -61,6 +93,9 @@ class NodeCreate(BaseModel):
     is_pending: bool = False
     return_node: Optional[str] = None
     extra: Optional[dict] = None
+    position_x: Optional[float] = None
+    position_y: Optional[float] = None
+    layout_manual: bool = False
 
 
 class NodeUpdate(BaseModel):
@@ -72,6 +107,17 @@ class NodeUpdate(BaseModel):
     is_pending: Optional[bool] = None
     return_node: Optional[str] = None
     extra: Optional[dict] = None
+    position_x: Optional[float] = None
+    position_y: Optional[float] = None
+    layout_manual: Optional[bool] = None
+
+
+class NodePositionUpdate(BaseModel):
+    """Lightweight batch update for drag-saved positions."""
+    id: str
+    position_x: float
+    position_y: float
+    layout_manual: bool = True
 
 
 class EdgeRead(BaseModel):
@@ -173,6 +219,31 @@ class EngineResponse(BaseModel):
     status: str
     collected_data: dict = {}
     unknown_flags: list = []
+
+
+class BotRead(BaseModel):
+    id: int
+    schema_id: str
+    username: Optional[str] = None
+    enabled: bool
+    status: str
+    last_error: Optional[str] = None
+    started_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    has_token: bool = True  # never leak the token itself
+
+    class Config:
+        from_attributes = True
+
+
+class BotUpsert(BaseModel):
+    token: str
+    enabled: Optional[bool] = True
+
+
+class BotEnableToggle(BaseModel):
+    enabled: bool
 
 
 class TokenResponse(BaseModel):

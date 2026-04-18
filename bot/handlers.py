@@ -41,12 +41,23 @@ NUMERIC_INPUT = 2
 MULTI_SELECT = 3
 
 
+def _schema_id(context) -> str:
+    """Fetch the schema bound to this bot Application.
+
+    The orchestrator stores the schema_id in `application.bot_data["schema_id"]`
+    at build time. If missing (e.g. legacy single-bot launch), fall back to
+    the default "endo-bot" schema so existing deployments keep working.
+    """
+    sid = (context.application.bot_data or {}).get("schema_id") if context.application else None
+    return sid or "endo-bot"
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Commands
 # ──────────────────────────────────────────────────────────────────────────
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = str(update.effective_user.id)
-    data = await api_client.start_session(user_id)
+    data = await api_client.start_session(_schema_id(context), user_id)
 
     context.user_data["session_id"] = data["session_id"]
     context.user_data["multi_selected"] = set()
@@ -169,7 +180,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 # ──────────────────────────────────────────────────────────────────────────
 async def _submit_and_advance(message, context, session_id, node_id, answer) -> int:
     try:
-        data = await api_client.submit_answer(session_id, node_id, answer)
+        data = await api_client.submit_answer(_schema_id(context), session_id, node_id, answer)
     except Exception as e:
         logger.exception("submit_answer failed")
         await message.reply_text(f"❌ Ошибка связи с сервером: {e}")

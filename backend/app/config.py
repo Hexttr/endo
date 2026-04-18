@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://endo:endo@localhost:5432/endo_bot"
     DATABASE_URL_SYNC: str = "postgresql+psycopg2://endo:endo@localhost:5432/endo_bot"
     SECRET_KEY: str = "change-me-in-production"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080  # 7 days (internal admin tool)
     ALGORITHM: str = "HS256"
 
     class Config:

@@ -5,3 +5,30 @@
 body {
   font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
+
+/* Smooth node movement in the TreeView.
+   We intentionally do NOT transition `transform` by default. ReactFlow updates
+   the inline transform on every drag frame (~60/sec); putting a transition on
+   `transform` makes the node lag ~260ms behind the cursor ("не следует за
+   пальцем"). Instead, we opt-in via a wrapper class `.rf-animating` that the
+   TreeView turns on for ~320ms around explicit programmatic layout changes
+   (reset layout, node creation, schema switch). Drag stays crisp. */
+.rf-animating .react-flow__node:not(.dragging) {
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.rf-animating .react-flow__node[data-id="__graph_bounds__"] {
+  transition: none;
+}
+
+/* Selection ring — our node styles override RF's default `.selected` border
+   with an inline one, so we use `outline` (which stacks on top of borders and
+   doesn't shift layout) to surface selection state for the user. Needed so
+   pressing Del/Backspace actually removes something visible. */
+.react-flow__node.selected {
+  outline: 3px solid #3b82f6;
+  outline-offset: 2px;
+  border-radius: 12px;
+}
+.react-flow__node.selected[data-id^="F"] {
+  outline-color: #16a34a;
+}
