@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import {
   ReactFlow, Controls, Background, MiniMap,
@@ -103,6 +103,21 @@ function TreeViewInner() {
     if (layoutAnimTimerRef.current) clearTimeout(layoutAnimTimerRef.current)
     layoutAnimTimerRef.current = setTimeout(() => setLayoutAnimating(false), 320)
   }, [])
+  // Selection is tracked in our own React state (not via RF's internal
+  // `.selected` class). Reason: RF v12 syncs the `nodes` prop into its Zustand
+  // store inside a useLayoutEffect inside <ReactFlow>, which runs AFTER our
+  // TreeView commits. That makes the built-in `.selected` class always trail
+  // by one render cycle — the user would see the outline appear on the
+  // previous node when they clicked the next one. We dodge that by owning
+  // selection ourselves and toggling a custom class in a useLayoutEffect on
+  // the same render.
+  const [selectedNodeIds, setSelectedNodeIds] = useState(() => new Set())
+  // RF-owned mirror of flowNodes/flowEdges (see the big note further down
+  // near the sync useEffects). Hoisted up so earlier effects / handlers that
+  // dep on `rfNodes` (e.g. the Del/Backspace keyboard handler) don't hit a
+  // Temporal Dead Zone.
+  const [rfNodes, setRfNodes] = useState([])
+  const [rfEdges, setRfEdges] = useState([])
   // Force "fit all" on genuine page reloads (F5 / Ctrl+R). SPA navigation
   // within the admin keeps the saved viewport so returning from an editor
   // lands the user exactly where they were.
@@ -314,6 +329,16 @@ function TreeViewInner() {
       setToast(`Ошибка сохранения позиций: ${e.message}`)
       setTimeout(() => setToast(''), 4000)
     }
+  }, [])
+
+  const onNodeClick = useCallback((_, node) => {
+    if (node?.data?.isBounds) return
+    if (!node?.id) return
+    setSelectedNodeIds(new Set([node.id]))
+  }, [])
+
+  const onPaneClick = useCallback(() => {
+    setSelectedNodeIds(prev => (prev.size === 0 ? prev : new Set()))
   }, [])
 
   const onNodeDragStop = useCallback((_, node) => {
@@ -714,11 +739,42 @@ function TreeViewInner() {
       if (e.key === 'n' || e.key === 'N') {
         e.preventDefault()
         handleCreateNewNode()
+        return
+      }
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedNodeIds.size === 0) return
+        e.preventDefault()
+        const ids = [...selectedNodeIds]
+        const items = ids.map(id => {
+          const rfn = rfNodes.find(x => x.id === id)
+          return rfn || { id, data: {} }
+        })
+        // Route via the same handler RF would call so delete semantics stay
+        // in one place (skips bounds/finals, refreshes graph, toasts).
+        onNodesDelete(items)
+        setSelectedNodeIds(new Set())
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [handleCreateNewNode])
+  }, [handleCreateNewNode, selectedNodeIds, rfNodes, onNodesDelete])
+
+  // Imperatively mirror `selectedNodeIds` to a `hl-selected` class on the
+  // matching `.react-flow__node` DOM elements. useLayoutEffect runs in the
+  // same commit phase as React's DOM mutation — so the highlight appears in
+  // the SAME frame the user clicked, without the one-cycle lag that RF's
+  // built-in `.selected` suffers from (see note on selectedNodeIds above).
+  useLayoutEffect(() => {
+    const pane = paneRef.current
+    if (!pane) return
+    const nodeEls = pane.querySelectorAll('.react-flow__node')
+    nodeEls.forEach(el => {
+      const id = el.getAttribute('data-id')
+      if (!id) return
+      if (selectedNodeIds.has(id)) el.classList.add('hl-selected')
+      else el.classList.remove('hl-selected')
+    })
+  }, [selectedNodeIds, rfNodes])
 
   // Dynamic minimum zoom: the user cannot zoom out past "whole graph
   // visible with a small padding". The red frame plus translateExtent
@@ -776,8 +832,9 @@ function TreeViewInner() {
   // mirror them into RF-owned state that also carries transient interaction
   // flags (selected, dragging, live drag position). On every source change we
   // re-merge, preserving the transient flags for nodes/edges that still exist.
-  const [rfNodes, setRfNodes] = useState([])
-  const [rfEdges, setRfEdges] = useState([])
+  // NOTE: rfNodes/rfEdges useState declarations are hoisted to the top of the
+  // component (near the other useStates) so that earlier effects can reference
+  // them without hitting a TDZ. Sync effects and onChange handlers stay here.
 
   useEffect(() => {
     setRfNodes(prev => {
@@ -1005,6 +1062,8 @@ function TreeViewInner() {
             nodesConnectable={true}
             nodesDraggable={true}
             onInit={onInit}
+            onNodeClick={onNodeClick}
+            onPaneClick={onPaneClick}
             onNodeDoubleClick={onNodeDoubleClick}
             onNodeDragStop={onNodeDragStop}
             onConnect={onConnect}

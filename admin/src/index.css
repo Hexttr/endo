@@ -20,15 +20,30 @@ body {
   transition: none;
 }
 
-/* Selection ring — our node styles override RF's default `.selected` border
-   with an inline one, so we use `outline` (which stacks on top of borders and
-   doesn't shift layout) to surface selection state for the user. Needed so
-   pressing Del/Backspace actually removes something visible. */
-.react-flow__node.selected {
-  outline: 3px solid #3b82f6;
+/* Selection ring — we deliberately DON'T use RF's built-in `.selected` class
+   for the outline. The reason: RF v12 syncs the `nodes` prop into its store
+   inside a useLayoutEffect, so the `.selected` class the user sees is always
+   one render cycle behind. On the second click you'd see the PREVIOUS node
+   selected briefly before the highlight snaps over. Instead, TreeView owns a
+   `selectedNodeIds` state and imperatively toggles `.hl-selected` on the
+   matching DOM elements inside a useLayoutEffect — same commit, same paint,
+   no lag. `!important` ensures the outline wins over any inline style. */
+.react-flow__node.hl-selected {
+  outline: 3px solid #3b82f6 !important;
   outline-offset: 2px;
-  border-radius: 12px;
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.3), 0 0 16px rgba(59, 130, 246, 0.35) !important;
+  z-index: 10;
 }
-.react-flow__node.selected[data-id^="F"] {
-  outline-color: #16a34a;
+.react-flow__node.hl-selected[data-id^="F"] {
+  outline-color: #16a34a !important;
+  box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.3), 0 0 16px rgba(22, 163, 74, 0.35) !important;
+}
+
+/* Neutralise RF's built-in selection box-shadow so it doesn't produce a
+   "ghost" flicker one render cycle behind our own highlight. Our
+   `.hl-selected` above provides the real visual. */
+.react-flow__node-default.selectable.selected,
+.react-flow__node-default.selectable:focus,
+.react-flow__node-default.selectable:focus-visible {
+  box-shadow: none !important;
 }
