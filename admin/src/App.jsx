@@ -34,7 +34,7 @@ function LoginPage({ onLogin }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-indigo-900">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <h1 className="text-2xl font-bold text-center mb-2">Endo Bot</h1>
+        <h1 className="text-2xl font-bold text-center mb-2">МедЛогика</h1>
         <p className="text-gray-500 text-center mb-6">Панель управления</p>
         {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -123,12 +123,15 @@ function Layout({ children, onLogout }) {
     <div className="min-h-screen flex">
       <nav className="w-64 bg-gray-900 text-white flex flex-col shrink-0">
         <div className="p-6 border-b border-gray-700">
-          <img
-            src="/logo-w.png"
-            alt="Endo Bot"
-            className="h-11 w-auto max-w-full object-contain object-left"
-          />
-          <p className="text-gray-400 text-xs mt-3">Управление логикой бота</p>
+          <div className="flex flex-col items-center text-center">
+            <img
+              src="/logo-w.png"
+              alt="МедЛогика"
+              className="h-20 w-auto max-w-[200px] object-contain mx-auto"
+            />
+            <h1 className="text-lg font-semibold text-white mt-4 tracking-tight">МедЛогика</h1>
+            <p className="text-gray-400 text-xs mt-1.5 leading-snug">Управление логикой бота</p>
+          </div>
         </div>
         <SchemaSwitcher />
         <div className="flex-1 py-4 overflow-auto">

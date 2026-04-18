@@ -8,7 +8,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import dagre from 'dagre'
 import { fetchNodes, fetchEdgesGraph, fetchSections, fetchFinals, createEdge, deleteEdge, updateEdge, batchUpdatePositions, resetLayout, createOption, updateOption, deleteOption, createNode, deleteNode } from '../api'
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, HelpCircle, X } from 'lucide-react'
 
 const SECTION_COLORS = {
   branch_a: { bg: '#fef2f2', border: '#f87171', badge: '#dc2626' },
@@ -72,6 +72,7 @@ function TreeViewInner() {
   const [showFinals, setShowFinals] = useState(true)
   const [showLabels, setShowLabels] = useState(false)
   const [toast, setToast] = useState('')
+  const [helpOpen, setHelpOpen] = useState(false)
   const [contextMenu, setContextMenu] = useState(null)
   const [editingEdgeLabel, setEditingEdgeLabel] = useState(null)
   // One-shot highlight target is consumed once on mount (e.g. when navigating
@@ -179,6 +180,15 @@ function TreeViewInner() {
       .then(d => { setNodes(d); setNodesFetched(true) })
       .catch(() => setNodesFetched(true))
   }, [selectedSection])
+
+  useEffect(() => {
+    if (!helpOpen) return
+    const onKey = (e) => {
+      if (e.key === 'Escape') setHelpOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [helpOpen])
 
   // Fired by ReactFlow when its internal instance is ready to receive commands.
   const onInit = useCallback(() => {
@@ -1152,15 +1162,89 @@ function TreeViewInner() {
             </div>
           )}
 
-          {/* Help hint */}
-          <div className="absolute bottom-3 left-3 bg-white/95 rounded-lg px-3 py-2 text-xs text-gray-600 shadow border max-w-[640px] leading-relaxed">
-            <b>Клик</b> по узлу — выделить (синяя рамка) &bull;
-            <b> Перетяните</b> узел — новая позиция &bull;
-            Потяните от узла к узлу — новая связь + опция &bull;
-            <b> 2× клик</b> по связи — редактировать &bull;
-            <b> Del / Backspace</b> — удалить выделенный узел или связь &bull;
-            <b> N</b> — создать узел
-          </div>
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            className="absolute bottom-28 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-lg border border-gray-200/80 text-blue-600 hover:bg-blue-50 hover:border-blue-200 hover:shadow-xl transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
+            aria-label="Подсказки по работе с деревом"
+            title="Подсказки"
+          >
+            <HelpCircle className="h-7 w-7" strokeWidth={1.6} aria-hidden />
+          </button>
+
+          {helpOpen && (
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px]"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="tree-help-title"
+              onClick={() => setHelpOpen(false)}
+            >
+              <div
+                className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-gray-100 overflow-hidden"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                      <HelpCircle className="h-5 w-5" strokeWidth={2} />
+                    </span>
+                    <h2 id="tree-help-title" className="text-lg font-semibold text-gray-900">
+                      Подсказки по дереву
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setHelpOpen(false)}
+                    className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition"
+                    aria-label="Закрыть"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="px-5 py-4 max-h-[min(70vh,520px)] overflow-y-auto text-sm text-gray-700 space-y-3">
+                  <p className="text-gray-500 text-xs leading-relaxed">
+                    Кратко о том, как работать с графом визуально.
+                  </p>
+                  <ul className="space-y-3 list-none">
+                    <li className="flex gap-3">
+                      <span className="font-semibold text-blue-700 shrink-0 w-24">Клик</span>
+                      <span>по узлу — выделить (синяя рамка вокруг узла).</span>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="font-semibold text-blue-700 shrink-0 w-24">Перетаскивание</span>
+                      <span>узла — сохранить новую позицию на схеме.</span>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="font-semibold text-blue-700 shrink-0 w-24">Связь</span>
+                      <span>потяните от узла к узлу — создаётся связь и опция для бота (настройте подпись в узле).</span>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="font-semibold text-blue-700 shrink-0 w-24">2× клик</span>
+                      <span>по связи — редактировать подпись.</span>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="font-semibold text-blue-700 shrink-0 w-24">Del / Backspace</span>
+                      <span>— удалить выделенный узел или связь.</span>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="font-semibold text-blue-700 shrink-0 w-24">N</span>
+                      <span>— создать новый узел.</span>
+                    </li>
+                  </ul>
+                </div>
+                <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/80 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setHelpOpen(false)}
+                    className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
+                  >
+                    Понятно
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Live audit panel (top-right over the graph) */}
           <AuditPanel audit={audit} />
