@@ -146,7 +146,10 @@ function TreeViewInner() {
   }, [selectedSection])
 
   // Fired by ReactFlow when its internal instance is ready to receive commands.
-  const onInit = useCallback(() => setRfReady(true), [])
+  const onInit = useCallback(() => {
+    console.log('[TreeView] onInit fired')
+    setRfReady(true)
+  }, [])
 
   const onMoveEnd = useCallback((_, viewport) => {
     if (!initDone.current) return
@@ -349,10 +352,24 @@ function TreeViewInner() {
     return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad }
   }, [laidOutNodes, getNode])
 
+  // Pan bounds: graph box + 50% of graph size on every side. This keeps the
+  // graph reachable (user can pan around freely) but prevents the infinite
+  // drag-into-the-void that happens when translateExtent is undefined.
+  const translateExtent = useMemo(() => {
+    if (!graphBounds) return undefined
+    const gw = graphBounds.maxX - graphBounds.minX
+    const gh = graphBounds.maxY - graphBounds.minY
+    const bx = gw * 0.5
+    const by = gh * 0.5
+    return [
+      [graphBounds.minX - bx, graphBounds.minY - by],
+      [graphBounds.maxX + bx, graphBounds.maxY + by],
+    ]
+  }, [graphBounds])
+
   // Dynamic minimum zoom: the user cannot zoom out past "whole graph
-  // visible with a small padding". No translateExtent — that has caused
-  // repeated off-screen clamping bugs, and in practice the red frame
-  // provides enough visual feedback about where the graph is.
+  // visible with a small padding". The red frame plus translateExtent
+  // above give the user a clear boundary.
   const [dynMinZoom, setDynMinZoom] = useState(0.02)
   useEffect(() => {
     if (!graphBounds) return
@@ -404,108 +421,107 @@ function TreeViewInner() {
   // (excluding the red bounds frame). Using the built-in API avoids the
   // timing / clamping issues the manual setViewport path kept hitting.
   const fitAllNodes = useCallback(() => {
+    console.log('[TreeView/fit] called, flowNodes.length=', flowNodes.length)
     const realNodes = flowNodes.filter(n => !n.data?.isBounds).map(n => ({ id: n.id }))
-    if (realNodes.length === 0) return false
-    console.log('[TreeView/fit] nodes=', realNodes.length)
-    fitView({ nodes: realNodes, padding: 0.1, duration: 0, minZoom: 0.02, maxZoom: 2 })
+    console.log('[TreeView/fit] realNodes=', realNodes.length)
+    if (realNodes.length === 0) {
+      console.warn('[TreeView/fit] no real nodes, aborting')
+      return false
+    }
+    try {
+      fitView({ nodes: realNodes, padding: 0.1, duration: 0, minZoom: 0.02, maxZoom: 2 })
+      console.log('[TreeView/fit] fitView DONE')
+    } catch (err) {
+      console.error('[TreeView/fit] fitView threw', err)
+    }
     return true
   }, [flowNodes, fitView])
 
-  // One-time viewport initialization. We wait for:
-  //   1. The ReactFlow instance to be ready (onInit fired)
-  //   2. All three fetches to have RESOLVED (nodes, edges, finals) so the
-  //      graph we're measuring is the final one — otherwise dagre re-lays
-  //      everything after partial data arrives and we centre on stale coords.
-  //   3. flowNodes to contain at least one item.
-  //   4. The pane's DOM bounding box to have real width/height (browser
-  //      layout pass completed).
-  //
-  // We then retry focusOnNode for up to ~30 frames because the target node's
-  // DOM element might not be rendered on the first frame (React Flow renders
-  // nodes after layout). Each retry re-queries the DOM; once it finds the
-  // rendered node, it centres and stops.
-  useEffect(() => {
-    if (initDone.current) return
-    if (!rfReady) return
-    if (!nodesFetched || !edgesFetched || !finalsFetched) return
-    if (flowNodes.length === 0) return
-    if (highlightId && !getNode(highlightId)) return
-    const rect = paneRef.current?.getBoundingClientRect()
-    if (!rect || !rect.width || !rect.height) return
+  // Saved-viewport validator (used only for SPA nav back from an editor).
+  const isSavedViewportValid = useCallback((vp) => {
+    if (!vp || typeof vp.x !== 'number' || typeof vp.y !== 'number' || typeof vp.zoom !== 'number') return false
+    if (!Number.isFinite(vp.x) || !Number.isFinite(vp.y) || !Number.isFinite(vp.zoom)) return false
+    const lowerZoom = Math.max(0.02, dynMinZoom)
+    if (vp.zoom < lowerZoom || vp.zoom > 3) return false
+    if (!graphBounds) return false
+    const pane = paneRef.current?.getBoundingClientRect()
+    if (!pane || !pane.width || !pane.height) return false
+    const centerFlowX = (pane.width / 2 - vp.x) / vp.zoom
+    const centerFlowY = (pane.height / 2 - vp.y) / vp.zoom
+    return (
+      centerFlowX >= graphBounds.minX && centerFlowX <= graphBounds.maxX &&
+      centerFlowY >= graphBounds.minY && centerFlowY <= graphBounds.maxY
+    )
+  }, [dynMinZoom, graphBounds])
 
-    initDone.current = true
-
-    let cancelled = false
-    let rafId = 0
-
-    // Validate a saved viewport: at its zoom/translate, the pane centre must
-    // resolve to a flow coordinate inside the graph bounds. Anything else is
-    // treated as stale (e.g. a bad viewport saved during an earlier buggy
-    // build) and discarded so we fall through to fitAllNodes.
-    const isSavedViewportValid = (vp) => {
-      if (!vp || typeof vp.x !== 'number' || typeof vp.y !== 'number' || typeof vp.zoom !== 'number') return false
-      if (!Number.isFinite(vp.x) || !Number.isFinite(vp.y) || !Number.isFinite(vp.zoom)) return false
-      // Zoom must be within the ACTUAL bounds ReactFlow allows right now.
-      // If dynMinZoom hasn't updated yet, fall back to the permissive default.
-      const lowerZoom = Math.max(0.02, dynMinZoom)
-      if (vp.zoom < lowerZoom || vp.zoom > 3) return false
-      if (!graphBounds) return false
-      const pane = paneRef.current?.getBoundingClientRect()
-      if (!pane || !pane.width || !pane.height) return false
-      const centerFlowX = (pane.width / 2 - vp.x) / vp.zoom
-      const centerFlowY = (pane.height / 2 - vp.y) / vp.zoom
-      return (
-        centerFlowX >= graphBounds.minX && centerFlowX <= graphBounds.maxX &&
-        centerFlowY >= graphBounds.minY && centerFlowY <= graphBounds.maxY
-      )
-    }
-
-    const runFallback = () => {
-      // On F5/Ctrl+R the user explicitly asked for "always show the whole
-      // graph". We clear any saved viewport in the initial-state factory
-      // already, but double-check here.
-      if (isPageReload) {
-        fitAllNodes()
-        return
+  const doInitialCenter = useCallback(() => {
+    console.log('[TreeView/init] doInitialCenter fired', {
+      highlightId, isPageReload, flowNodesLen: flowNodes.length,
+    })
+    if (highlightId) {
+      const node = getNode(highlightId)
+      console.log('[TreeView/init] highlight node lookup', { highlightId, found: !!node })
+      if (node) {
+        focusOnNode(highlightId)
+        return true
       }
-      try {
-        const saved = sessionStorage.getItem(VIEWPORT_KEY)
-        if (saved) {
-          const vp = JSON.parse(saved)
-          if (isSavedViewportValid(vp)) {
-            setViewport(vp, { duration: 0 })
-            return
-          }
-          try { sessionStorage.removeItem(VIEWPORT_KEY) } catch {}
+      // Node not in store yet — fall through to fit
+      console.warn('[TreeView/init] highlight node NOT in store, falling back to fit')
+    }
+    if (isPageReload) {
+      return fitAllNodes()
+    }
+    try {
+      const saved = sessionStorage.getItem(VIEWPORT_KEY)
+      if (saved) {
+        const vp = JSON.parse(saved)
+        if (isSavedViewportValid(vp)) {
+          console.log('[TreeView/init] restoring saved viewport', vp)
+          setViewport(vp, { duration: 0 })
+          return true
         }
-      } catch {
         try { sessionStorage.removeItem(VIEWPORT_KEY) } catch {}
       }
-      fitAllNodes()
+    } catch {
+      try { sessionStorage.removeItem(VIEWPORT_KEY) } catch {}
     }
+    return fitAllNodes()
+  }, [highlightId, isPageReload, flowNodes.length, getNode, focusOnNode, fitAllNodes, isSavedViewportValid, setViewport])
 
-    const tryFocus = (attempt) => {
-      if (cancelled) return
-      if (highlightId && focusOnNode(highlightId)) return
-      if (attempt < 30) {
-        rafId = requestAnimationFrame(() => tryFocus(attempt + 1))
-        return
-      }
-      // DOM never produced the node — fall back.
-      runFallback()
-    }
+  // Primary init path. As soon as we have at least one real node AND the
+  // pane has a non-zero rect, schedule a single-shot initial centre after
+  // a short delay so ReactFlow has a chance to measure the nodes it just
+  // received.
+  useEffect(() => {
+    if (initDone.current) return
+    if (flowNodes.length <= 1) return // only the bounds frame, no real data
+    const rect = paneRef.current?.getBoundingClientRect()
+    console.log('[TreeView/init] scheduling init', {
+      flowNodesLen: flowNodes.length,
+      rect: rect ? { w: rect.width, h: rect.height } : null,
+      rfReady, nodesFetched, edgesFetched, finalsFetched,
+    })
+    if (!rect || !rect.width || !rect.height) return
 
-    if (highlightId) {
-      rafId = requestAnimationFrame(() => tryFocus(0))
-    } else {
-      rafId = requestAnimationFrame(() => requestAnimationFrame(runFallback))
-    }
+    const t = setTimeout(() => {
+      if (initDone.current) return
+      initDone.current = true
+      doInitialCenter()
+    }, 250)
+    return () => clearTimeout(t)
+  }, [flowNodes.length, rfReady, nodesFetched, edgesFetched, finalsFetched, doInitialCenter])
 
-    return () => {
-      cancelled = true
-      if (rafId) cancelAnimationFrame(rafId)
-    }
-  }, [rfReady, nodesFetched, edgesFetched, finalsFetched, flowNodes.length, highlightId, focusOnNode, fitAllNodes, setViewport, getNode, graphBounds, dynMinZoom, isPageReload])
+  // Safety net: if for any reason the primary path hasn't run within 3 s,
+  // force a fit so the user is never stuck with a random default viewport.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (initDone.current) return
+      console.warn('[TreeView/init] SAFETY TIMER — forcing fitAllNodes')
+      initDone.current = true
+      doInitialCenter()
+    }, 3000)
+    return () => clearTimeout(t)
+  }, [doInitialCenter])
 
   return (
     <div className="h-screen flex flex-col overflow-hidden" onClick={() => setContextMenu(null)}>
@@ -589,6 +605,7 @@ function TreeViewInner() {
             onMoveEnd={onMoveEnd}
             minZoom={dynMinZoom}
             maxZoom={3}
+            translateExtent={translateExtent}
             defaultEdgeOptions={{ type: 'smoothstep' }}
           >
             <Background gap={20} size={1} color="#e5e7eb" />
