@@ -8,7 +8,10 @@ import {
 import '@xyflow/react/dist/style.css'
 import dagre from 'dagre'
 import { fetchNodes, fetchEdgesGraph, fetchSections, fetchFinals, createEdge, deleteEdge, updateEdge, batchUpdatePositions, resetLayout, createOption, updateOption, deleteOption, createNode, deleteNode } from '../api'
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, HelpCircle, X } from 'lucide-react'
+import {
+  AlertTriangle, CheckCircle2, ChevronDown, ChevronUp,
+  HelpCircle, X, MousePointer2, Move, Link2, MousePointerClick, Trash2, Plus,
+} from 'lucide-react'
 
 const SECTION_COLORS = {
   branch_a: { bg: '#fef2f2', border: '#f87171', badge: '#dc2626' },
@@ -1165,79 +1168,128 @@ function TreeViewInner() {
           <button
             type="button"
             onClick={() => setHelpOpen(true)}
-            className="absolute bottom-28 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-lg border border-gray-200/80 text-blue-600 hover:bg-blue-50 hover:border-blue-200 hover:shadow-xl transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
+            className="group absolute bottom-28 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 text-white shadow-[0_10px_40px_-6px_rgba(37,99,235,0.65),0_4px_12px_-2px_rgba(30,64,175,0.45)] ring-[3px] ring-white/95 ring-offset-2 ring-offset-slate-100/90 hover:shadow-[0_14px_44px_-4px_rgba(59,130,246,0.7),0_6px_16px_-2px_rgba(30,64,175,0.5)] hover:from-blue-500 hover:via-blue-600 hover:to-indigo-700 hover:scale-[1.06] active:scale-[0.98] transition-all duration-200 focus:outline-none focus-visible:ring-4 focus-visible:ring-blue-400/80 focus-visible:ring-offset-2"
             aria-label="Подсказки по работе с деревом"
-            title="Подсказки"
+            title="Подсказки по дереву"
           >
-            <HelpCircle className="h-7 w-7" strokeWidth={1.6} aria-hidden />
+            <HelpCircle className="h-8 w-8 drop-shadow-sm group-hover:scale-105 transition-transform" strokeWidth={2.25} aria-hidden />
           </button>
 
           {helpOpen && (
             <div
-              className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/45 backdrop-blur-[2px]"
+              className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/55 backdrop-blur-md"
               role="dialog"
               aria-modal="true"
               aria-labelledby="tree-help-title"
               onClick={() => setHelpOpen(false)}
             >
               <div
-                className="bg-white rounded-2xl shadow-2xl max-w-lg w-full border border-gray-100 overflow-hidden"
+                className="bg-white rounded-2xl shadow-[0_25px_80px_-12px_rgba(15,23,42,0.45)] max-w-xl w-full border border-slate-200/80 overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-white">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-blue-700">
-                      <HelpCircle className="h-5 w-5" strokeWidth={2} />
-                    </span>
-                    <h2 id="tree-help-title" className="text-lg font-semibold text-gray-900">
-                      Подсказки по дереву
-                    </h2>
+                <div className="relative overflow-hidden px-6 pt-6 pb-5 bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 text-white">
+                  <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-blue-500/20 blur-3xl" aria-hidden />
+                  <div className="pointer-events-none absolute -bottom-8 -left-8 h-40 w-40 rounded-full bg-indigo-500/15 blur-2xl" aria-hidden />
+                  <div className="relative flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-4 min-w-0">
+                      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/25 shadow-inner backdrop-blur-sm">
+                        <HelpCircle className="h-7 w-7 text-white" strokeWidth={2} />
+                      </span>
+                      <div>
+                        <h2 id="tree-help-title" className="text-xl font-semibold tracking-tight text-white">
+                          Подсказки по дереву
+                        </h2>
+                        <p className="mt-1.5 text-sm text-blue-100/90 leading-snug">
+                          Управление графом решений на холсте МедЛогики
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setHelpOpen(false)}
+                      className="shrink-0 rounded-xl p-2 text-blue-100/90 hover:bg-white/10 hover:text-white transition"
+                      aria-label="Закрыть"
+                    >
+                      <X className="h-5 w-5" strokeWidth={2} />
+                    </button>
                   </div>
+                </div>
+
+                <div className="px-5 py-5 max-h-[min(65vh,480px)] overflow-y-auto bg-gradient-to-b from-slate-50/80 to-white">
+                  <div className="space-y-2.5">
+                    {[
+                      {
+                        Icon: MousePointer2,
+                        title: 'Выделение узла',
+                        body: 'Клик по узлу — подсветка рамкой; так вы понимаете, что будет удалено по Del.',
+                      },
+                      {
+                        Icon: Move,
+                        title: 'Позиция на схеме',
+                        body: 'Перетащите узел — координаты сохраняются для этой схемы.',
+                      },
+                      {
+                        Icon: Link2,
+                        title: 'Новая связь и опция',
+                        body: 'Потяните от узла к узлу: появится связь и вариант ответа для бота. Текст кнопки настройте в карточке узла.',
+                      },
+                      {
+                        Icon: MousePointerClick,
+                        title: 'Подпись связи',
+                        body: 'Двойной клик по линии — редактирование подписи или текста кнопки.',
+                      },
+                      {
+                        Icon: Trash2,
+                        title: 'Удаление',
+                        body: (
+                          <>
+                            <kbd className="mx-0.5 inline-flex items-center rounded-md border border-slate-300 bg-white px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-800 shadow-sm">Del</kbd>
+                            {' / '}
+                            <kbd className="mx-0.5 inline-flex items-center rounded-md border border-slate-300 bg-white px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-800 shadow-sm">Backspace</kbd>
+                            {' — удалить выделенный узел или связь.'}
+                          </>
+                        ),
+                      },
+                      {
+                        Icon: Plus,
+                        title: 'Новый узел',
+                        body: (
+                          <>
+                            Клавиша{' '}
+                            <kbd className="mx-0.5 inline-flex min-w-[1.75rem] justify-center rounded-md border border-slate-300 bg-white px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-800 shadow-sm">N</kbd>
+                            {' — создать узел на схеме.'}
+                          </>
+                        ),
+                      },
+                    ].map(({ Icon, title, body }) => (
+                      <div
+                        key={title}
+                        className="flex gap-3.5 rounded-xl border border-slate-200/90 bg-white p-3.5 shadow-sm shadow-slate-200/40 transition hover:border-blue-200/80 hover:shadow-md hover:shadow-blue-500/5"
+                      >
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 text-blue-700 ring-1 ring-blue-100/80">
+                          <Icon className="h-5 w-5" strokeWidth={2} />
+                        </div>
+                        <div className="min-w-0 pt-0.5">
+                          <div className="text-sm font-semibold text-slate-900">{title}</div>
+                          <div className="mt-1 text-sm text-slate-600 leading-relaxed">{body}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-slate-200/90 bg-slate-50/90">
                   <button
                     type="button"
                     onClick={() => setHelpOpen(false)}
-                    className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition"
-                    aria-label="Закрыть"
+                    className="inline-flex items-center justify-center rounded-xl px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-200/60 transition"
                   >
-                    <X className="h-5 w-5" />
+                    Закрыть
                   </button>
-                </div>
-                <div className="px-5 py-4 max-h-[min(70vh,520px)] overflow-y-auto text-sm text-gray-700 space-y-3">
-                  <p className="text-gray-500 text-xs leading-relaxed">
-                    Кратко о том, как работать с графом визуально.
-                  </p>
-                  <ul className="space-y-3 list-none">
-                    <li className="flex gap-3">
-                      <span className="font-semibold text-blue-700 shrink-0 w-24">Клик</span>
-                      <span>по узлу — выделить (синяя рамка вокруг узла).</span>
-                    </li>
-                    <li className="flex gap-3">
-                      <span className="font-semibold text-blue-700 shrink-0 w-24">Перетаскивание</span>
-                      <span>узла — сохранить новую позицию на схеме.</span>
-                    </li>
-                    <li className="flex gap-3">
-                      <span className="font-semibold text-blue-700 shrink-0 w-24">Связь</span>
-                      <span>потяните от узла к узлу — создаётся связь и опция для бота (настройте подпись в узле).</span>
-                    </li>
-                    <li className="flex gap-3">
-                      <span className="font-semibold text-blue-700 shrink-0 w-24">2× клик</span>
-                      <span>по связи — редактировать подпись.</span>
-                    </li>
-                    <li className="flex gap-3">
-                      <span className="font-semibold text-blue-700 shrink-0 w-24">Del / Backspace</span>
-                      <span>— удалить выделенный узел или связь.</span>
-                    </li>
-                    <li className="flex gap-3">
-                      <span className="font-semibold text-blue-700 shrink-0 w-24">N</span>
-                      <span>— создать новый узел.</span>
-                    </li>
-                  </ul>
-                </div>
-                <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/80 flex justify-end">
                   <button
                     type="button"
                     onClick={() => setHelpOpen(false)}
-                    className="px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
+                    className="inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-indigo-700 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/25 hover:from-blue-500 hover:to-indigo-600 hover:shadow-blue-500/35 transition"
                   >
                     Понятно
                   </button>
