@@ -1014,6 +1014,7 @@ function TreeViewInner() {
             onEdgesDelete={onEdgesDelete}
             onNodesDelete={onNodesDelete}
             deleteKeyCode={['Delete', 'Backspace']}
+            nodeClickDistance={6}
             minZoom={dynMinZoom}
             maxZoom={3}
             translateExtent={translateExtent}
