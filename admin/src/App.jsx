@@ -13,7 +13,7 @@ import SchemasList from './pages/SchemasList'
 import Playground from './pages/Playground'
 import {
   LayoutDashboard, GitBranch, List, FileText, Users, LogOut,
-  Layers, ChevronDown, Play,
+  Layers, ChevronDown, Play, User, Lock,
 } from 'lucide-react'
 
 function LoginPage({ onLogin }) {
@@ -33,26 +33,52 @@ function LoginPage({ onLogin }) {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-900 to-indigo-900">
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <h1 className="text-2xl font-bold text-center mb-2">МедЛогика</h1>
-        <p className="text-gray-500 text-center mb-6">Панель управления</p>
+      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md border border-white/10">
+        <div className="flex flex-col items-center text-center mb-8">
+          <img
+            src="/logo-w.png"
+            alt="МедЛогика"
+            className="h-24 w-auto max-w-[220px] object-contain drop-shadow-sm"
+          />
+          <h1 className="text-2xl font-bold text-gray-900 mt-5 tracking-tight">МедЛогика</h1>
+          <p className="text-gray-500 text-sm mt-1.5">Панель управления</p>
+        </div>
         {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">{error}</div>}
         <form onSubmit={handleSubmit} className="space-y-4">
-          <input
-            type="text"
-            placeholder="Логин"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-          />
-          <input
-            type="password"
-            placeholder="Пароль"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
-          />
-          <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-semibold">
+          <div className="relative">
+            <User
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none"
+              strokeWidth={2}
+              aria-hidden
+            />
+            <input
+              type="text"
+              placeholder="Логин"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+            />
+          </div>
+          <div className="relative">
+            <Lock
+              className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none"
+              strokeWidth={2}
+              aria-hidden
+            />
+            <input
+              type="password"
+              placeholder="Пароль"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              className="w-full pl-11 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+            />
+          </div>
+          <button
+            type="submit"
+            className="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 font-semibold shadow-md shadow-blue-600/20 transition"
+          >
             Войти
           </button>
         </form>
