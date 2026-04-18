@@ -3,6 +3,7 @@ import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import {
   ReactFlow, Controls, Background, MiniMap,
   useReactFlow, ReactFlowProvider,
+  applyNodeChanges, applyEdgeChanges,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import dagre from 'dagre'
@@ -769,6 +770,50 @@ function TreeViewInner() {
     return [frame, ...laidOutNodes]
   }, [laidOutNodes, graphBounds])
 
+  // ReactFlow v12 requires onNodesChange/onEdgesChange for interactivity
+  // (selection, drag follow-the-cursor, keyboard delete). We keep `flowNodes`
+  // / `flowEdges` as the derived source-of-truth coming from DB state, and
+  // mirror them into RF-owned state that also carries transient interaction
+  // flags (selected, dragging, live drag position). On every source change we
+  // re-merge, preserving the transient flags for nodes/edges that still exist.
+  const [rfNodes, setRfNodes] = useState([])
+  const [rfEdges, setRfEdges] = useState([])
+
+  useEffect(() => {
+    setRfNodes(prev => {
+      const prevById = new Map(prev.map(n => [n.id, n]))
+      return flowNodes.map(n => {
+        const old = prevById.get(n.id)
+        if (!old) return n
+        // Preserve RF's transient state. For dragging nodes we also keep the
+        // live position so the cursor lock isn't broken mid-drag by a source
+        // refresh (e.g. toast re-render).
+        const merged = { ...n, selected: old.selected, dragging: old.dragging }
+        if (old.dragging && old.position) merged.position = old.position
+        return merged
+      })
+    })
+  }, [flowNodes])
+
+  useEffect(() => {
+    setRfEdges(prev => {
+      const prevById = new Map(prev.map(e => [e.id, e]))
+      return flowEdges.map(e => {
+        const old = prevById.get(e.id)
+        if (!old) return e
+        return { ...e, selected: old.selected }
+      })
+    })
+  }, [flowEdges])
+
+  const onNodesChange = useCallback((changes) => {
+    setRfNodes(ns => applyNodeChanges(changes, ns))
+  }, [])
+
+  const onEdgesChange = useCallback((changes) => {
+    setRfEdges(es => applyEdgeChanges(changes, es))
+  }, [])
+
   // Fit-all = ReactFlow's native fitView constrained to real nodes only
   // (excluding the red bounds frame). Using the built-in API avoids the
   // timing / clamping issues the manual setViewport path kept hitting.
@@ -953,8 +998,10 @@ function TreeViewInner() {
         {/* Graph */}
         <div ref={paneRef} className={`flex-1 relative ${layoutAnimating ? 'rf-animating' : ''}`}>
           <ReactFlow
-            nodes={flowNodes}
-            edges={flowEdges}
+            nodes={rfNodes}
+            edges={rfEdges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
             nodesConnectable={true}
             nodesDraggable={true}
             onInit={onInit}
