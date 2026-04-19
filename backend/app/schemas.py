@@ -10,6 +10,8 @@ class SchemaRead(BaseModel):
     id: str
     name: str
     description: Optional[str] = None
+    # Short-id of the root node (e.g. "N000") — clients never see the "{schema}::{short}" form.
+    root_node_id: Optional[str] = None
     created_at: Optional[datetime] = None
 
     class Config:
@@ -20,11 +22,15 @@ class SchemaCreate(BaseModel):
     id: str
     name: str
     description: Optional[str] = None
+    root_node_id: Optional[str] = None
 
 
 class SchemaUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    # Accept short_id; schemas_api normalises and validates existence.
+    # Pass an empty string to explicitly clear the root.
+    root_node_id: Optional[str] = None
 
 
 class SchemaClone(BaseModel):
@@ -99,6 +105,7 @@ class NodeCreate(BaseModel):
 
 
 class NodeUpdate(BaseModel):
+    section: Optional[str] = None
     text: Optional[str] = None
     description: Optional[str] = None
     input_type: Optional[str] = None
@@ -246,6 +253,36 @@ class BotEnableToggle(BaseModel):
     enabled: bool
 
 
+class SectionRead(BaseModel):
+    slug: str
+    label: str
+    description: Optional[str] = None
+    color: Optional[str] = None
+    order: int = 0
+    node_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class SectionCreate(BaseModel):
+    slug: str
+    label: str
+    description: Optional[str] = None
+    color: Optional[str] = None
+    order: Optional[int] = 0
+
+
+class SectionUpdate(BaseModel):
+    # `slug` is editable — renaming cascades to every node.section via the
+    # composite FK (ON UPDATE CASCADE).
+    slug: Optional[str] = None
+    label: Optional[str] = None
+    description: Optional[str] = None
+    color: Optional[str] = None
+    order: Optional[int] = None
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -254,3 +291,30 @@ class TokenResponse(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+# ── Users (admin CRUD) ────────────────────────────────────────────
+
+class UserRead(BaseModel):
+    id: int
+    username: str
+    fio: Optional[str] = None
+    role: str
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+    fio: Optional[str] = None
+    role: Optional[str] = "editor"
+
+
+class UserUpdate(BaseModel):
+    # Password change is optional; when provided, it replaces the hash.
+    password: Optional[str] = None
+    fio: Optional[str] = None
+    role: Optional[str] = None

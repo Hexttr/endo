@@ -20,7 +20,15 @@ export default function NodeList() {
   }
 
   useEffect(() => {
-    fetchSections().then(setSections).catch(() => {})
+    fetchSections().then((s) => {
+      setSections(s)
+      // Pre-fill the new-node form with the first available section so user
+      // doesn't have to guess a slug.
+      if (s?.length && !newNode.section) {
+        setNewNode(n => ({ ...n, section: typeof s[0] === 'string' ? s[0] : s[0].slug }))
+      }
+    }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => { loadNodes() }, [selectedSection])
@@ -83,7 +91,11 @@ export default function NodeList() {
             className="border rounded-lg px-3 py-2 text-sm"
           >
             <option value="">Все секции</option>
-            {sections.map(s => <option key={s} value={s}>{s}</option>)}
+            {sections.map(s => {
+              const slug = typeof s === 'string' ? s : s.slug
+              const label = typeof s === 'string' ? s : (s.label || s.slug)
+              return <option key={slug} value={slug}>{label}</option>
+            })}
           </select>
           <div className="relative">
             <Search size={16} className="absolute left-2.5 top-2.5 text-gray-400" />
@@ -128,17 +140,21 @@ export default function NodeList() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Секция</label>
-                  <input
-                    type="text"
+                  <select
                     value={newNode.section}
                     onChange={(e) => setNewNode({ ...newNode, section: e.target.value })}
-                    placeholder="напр. branch_b"
-                    list="sections-list"
-                    className="w-full border rounded-lg px-3 py-2 text-sm"
-                  />
-                  <datalist id="sections-list">
-                    {sections.map(s => <option key={s} value={s} />)}
-                  </datalist>
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                  >
+                    {sections.length === 0 && <option value="">— сначала создайте секцию —</option>}
+                    {sections.map(s => {
+                      const slug = typeof s === 'string' ? s : s.slug
+                      const label = typeof s === 'string' ? s : (s.label || s.slug)
+                      return <option key={slug} value={slug}>{label}</option>
+                    })}
+                  </select>
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    Список секций редактируется на вкладке «Обзор».
+                  </p>
                 </div>
               </div>
               <div>

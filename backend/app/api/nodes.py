@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
-from app.models import Node, Option, Edge, AuditLog, User
+from app.models import Node, Option, Edge, Section, Schema, AuditLog, User
 from app.schemas import (
     NodeRead, NodeCreate, NodeUpdate, NodePositionUpdate,
     OptionRead, OptionCreate, OptionUpdate,
@@ -38,6 +38,31 @@ def _project_node(node: Node) -> dict:
         "layout_manual": node.layout_manual,
         "options": [_project_option(o) for o in (node.options or [])],
     }
+
+
+async def _ensure_section(db: AsyncSession, schema_id: str, slug: str) -> None:
+    """Lazily create a Section row if the caller references a new slug.
+
+    The composite FK on Node.section requires a matching Section row. Rather
+    than making every node-create call error out when the slug is new, we
+    auto-register it here (admin can rename/recolour later from the Dashboard).
+    Idempotent — does nothing if the section already exists.
+    """
+    if not slug:
+        return
+    existing = (await db.execute(
+        select(Section).where(Section.schema_id == schema_id, Section.slug == slug)
+    )).scalar_one_or_none()
+    if existing:
+        return
+    db.add(Section(
+        id=f"{schema_id}::{slug}",
+        schema_id=schema_id,
+        slug=slug,
+        label=slug,
+        order=0,
+    ))
+    await db.flush()
 
 
 def _project_option(opt: Option) -> dict:
@@ -162,6 +187,7 @@ async def create_node(
     payload["id"] = fid
     payload["return_node"] = full_id(schema_id, body.return_node) if body.return_node else None
     payload["schema_id"] = schema_id
+    await _ensure_section(db, schema_id, body.section)
     node = Node(**payload)
     db.add(node)
     db.add(AuditLog(
@@ -169,6 +195,24 @@ async def create_node(
         entity_type="node", entity_id=body.id,
         new_value=body.model_dump(), schema_id=schema_id,
     ))
+
+    # Convenience: if this is the very first node in the schema and the schema
+    # has no root configured yet, auto-promote this node to root. Users creating
+    # a brand-new schema otherwise have to remember to visit /schemas and set
+    # the starting node by hand — we've watched this be the #1 reason new bots
+    # "don't respond" after a fresh setup.
+    schema_row = (await db.execute(
+        select(Schema).where(Schema.id == schema_id)
+    )).scalar_one_or_none()
+    if schema_row and not schema_row.root_node_id:
+        schema_row.root_node_id = fid
+        db.add(AuditLog(
+            user_id=current_user.id, action="update",
+            entity_type="schema", entity_id=schema_id,
+            new_value={"root_node_id": short_id(fid), "auto_set": True},
+            schema_id=schema_id,
+        ))
+
     await db.commit()
     result = await db.execute(
         select(Node).options(selectinload(Node.options)).where(Node.id == fid)
@@ -197,6 +241,9 @@ async def update_node(
     updates = body.model_dump(exclude_unset=True)
     if "return_node" in updates:
         updates["return_node"] = full_id(schema_id, updates["return_node"]) if updates["return_node"] else None
+    if "section" in updates and updates["section"]:
+        # Lazy-register the target section so the composite FK can resolve.
+        await _ensure_section(db, schema_id, updates["section"])
     for key, value in updates.items():
         setattr(node, key, value)
 

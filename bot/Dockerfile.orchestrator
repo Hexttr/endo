@@ -1,0 +1,15 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Include the backend /.env path that orchestrator._load_db_url looks at,
+# but we prefer DATABASE_URL from env (set in docker-compose.yml / systemd).
+COPY . .
+
+# Multi-bot supervisor. Reads `bots` table, runs one Application per row.
+# DO NOT run concurrently with the legacy `main.py` single-bot launcher —
+# two pollers on the same token produce Telegram 409 Conflict errors.
+CMD ["python", "orchestrator.py"]

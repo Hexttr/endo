@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.database import engine, Base
-from app.api import auth, nodes, edges, finals, sessions, schemas_api, bots
+from app.api import auth, nodes, edges, finals, sessions, schemas_api, bots, sections, users, validation, audit
 from app.models import Schema, DEFAULT_SCHEMA_ID
 
 
@@ -41,7 +41,10 @@ app.add_middleware(
 )
 
 app.include_router(auth.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
 app.include_router(schemas_api.router, prefix="/api")
+app.include_router(validation.router, prefix="/api")
+app.include_router(audit.router, prefix="/api")
 
 # Entity routers are mounted twice:
 #   1. Legacy un-scoped routes ("/api/nodes/...") — used by the Telegram bot
@@ -50,15 +53,21 @@ app.include_router(schemas_api.router, prefix="/api")
 #      multi-schema admin panel. schema_id comes from the URL path.
 # Both sets share the same handler functions; the `_scoping.resolve_schema_id`
 # dependency reads schema_id from path_params or header.
+# Entity routers are mounted at the un-scoped `/api/...` prefix only. The
+# schema is resolved from the `X-Schema-Id` header (see _scoping.resolve_schema_id);
+# the admin panel always sends it. The exception is `nodes` — we also mount
+# it under `/api/schemas/{schema_id}/nodes` because the Schemas page needs to
+# list nodes of *other* schemas (e.g. picking a starting node) without
+# flipping the global active schema.
+#
+# Bot bindings are inherently per-schema, so their router lives *only* at
+# the scoped path.
 app.include_router(nodes.router, prefix="/api")
 app.include_router(nodes.router, prefix="/api/schemas/{schema_id}")
 app.include_router(edges.router, prefix="/api")
-app.include_router(edges.router, prefix="/api/schemas/{schema_id}")
 app.include_router(finals.router, prefix="/api")
-app.include_router(finals.router, prefix="/api/schemas/{schema_id}")
+app.include_router(sections.router, prefix="/api")
 app.include_router(sessions.router, prefix="/api")
-app.include_router(sessions.router, prefix="/api/schemas/{schema_id}")
-# Bot binding is inherently per-schema, so we only expose it on the scoped path.
 app.include_router(bots.router, prefix="/api/schemas/{schema_id}")
 
 

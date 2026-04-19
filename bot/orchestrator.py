@@ -326,6 +326,20 @@ class Orchestrator:
         current_ids = set(self.supervisors.keys())
         desired_ids = set(desired.keys())
 
+        # One-line snapshot of reconciliation intent. Helps diagnose the common
+        # "bot row exists but no supervisor started" class of issues without
+        # digging through per-bot logs.
+        skipped = [
+            f"{r.schema_id}({r.status})" for r in rows
+            if not (r.enabled and r.status != "token_conflict")
+        ]
+        log.info(
+            "reconcile: desired=%s current=%s skipped=%s",
+            [f"{r.id}:{r.schema_id}" for r in desired.values()] or "[]",
+            sorted(current_ids) or "[]",
+            skipped or "[]",
+        )
+
         # Stop supervisors for bots removed / disabled / in conflict.
         for rid in current_ids - desired_ids:
             sup = self.supervisors.pop(rid)

@@ -35,12 +35,23 @@ async def start_session(
     engine = DecisionEngine(db, schema_id=schema_id)
     session = await engine.start_session(body.user_id)
     node = await engine.get_current_node(session)
+    # When neither Schema.root_node_id nor the legacy N000 fallback resolved to
+    # a real node, the session starts "blank". Surface a clear message so the
+    # bot (and playground) can tell the user exactly what to do instead of
+    # silently saying hi and doing nothing.
+    message = None
+    if not node:
+        message = (
+            "Для схемы не задан стартовый узел. "
+            "Откройте админ-панель → Схемы → выберите стартовый узел."
+        )
     return EngineResponse(
         session_id=session.id,
         current_node=_project_node(node) if node else None,
         status=session.status,
         collected_data=session.collected_data or {},
         unknown_flags=session.unknown_flags or [],
+        message=message,
     )
 
 

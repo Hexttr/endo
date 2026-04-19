@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import Node, Option, Edge, Final, Session, DEFAULT_SCHEMA_ID
+from app.models import Node, Option, Edge, Final, Session, Schema, DEFAULT_SCHEMA_ID
 
 logger = logging.getLogger(__name__)
 
@@ -44,16 +44,55 @@ class DecisionEngine:
     # ── Session / node / final lookup ─────────────────────────────
 
     async def start_session(self, user_id: str) -> Session:
+        """Start a new conversation at the schema's configured root node.
+
+        Precedence:
+          1. `Schema.root_node_id` — explicit, admin-set starting point.
+          2. Legacy `"{schema}::N000"` if such a node exists (keeps the
+             original 'endo-bot' schema working without migration data).
+          3. Leave `current_node_id = NULL` — the API/bot surface a clear
+             "root is not configured" message instead of silently advancing
+             into a ghost node.
+        """
+        root_id: Optional[str] = None
+        schema_row = (await self.db.execute(
+            select(Schema).where(Schema.id == self.schema_id)
+        )).scalar_one_or_none()
+        if schema_row and schema_row.root_node_id:
+            # Stored as full id — but defend against half-migrated rows.
+            candidate = (
+                schema_row.root_node_id
+                if SEP in schema_row.root_node_id
+                else self._fid(schema_row.root_node_id)
+            )
+            if await self._node_exists(candidate):
+                root_id = candidate
+            else:
+                logger.warning(
+                    "Schema %s root_node_id=%s not found; falling back",
+                    self.schema_id, schema_row.root_node_id,
+                )
+        if not root_id:
+            legacy = self._fid("N000")
+            if legacy and await self._node_exists(legacy):
+                root_id = legacy
+
         session = Session(
             schema_id=self.schema_id,
             user_id=user_id,
-            current_node_id=self._fid("N000"),
+            current_node_id=root_id,
             collected_data={}, unknown_flags=[], status="active",
         )
         self.db.add(session)
         await self.db.commit()
         await self.db.refresh(session)
         return session
+
+    async def _node_exists(self, full_node_id: str) -> bool:
+        result = await self.db.execute(
+            select(Node.id).where(Node.id == full_node_id, Node.schema_id == self.schema_id)
+        )
+        return result.scalar_one_or_none() is not None
 
     async def get_current_node(self, session: Session) -> Optional[Node]:
         if not session.current_node_id:

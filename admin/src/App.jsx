@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate, Link, useNavigate } from 'react-router-dom'
-import { isLoggedIn, logout, login } from './api'
+import { isLoggedIn, logout, login, fetchMe } from './api'
 import { SchemaProvider, useSchemaContext } from './schema-context'
 import Dashboard from './pages/Dashboard'
 import TreeView from './pages/TreeView'
@@ -10,10 +10,12 @@ import FinalsList from './pages/FinalsList'
 import FinalEditor from './pages/FinalEditor'
 import SessionsList from './pages/SessionsList'
 import SchemasList from './pages/SchemasList'
+import UsersList from './pages/UsersList'
 import Playground from './pages/Playground'
+import AuditLog from './pages/AuditLog'
 import {
   LayoutDashboard, GitBranch, List, FileText, Users, LogOut,
-  Layers, ChevronDown, Play, User, Lock,
+  Layers, ChevronDown, Play, User, Lock, UserCog, History,
 } from 'lucide-react'
 
 function LoginPage({ onLogin }) {
@@ -133,6 +135,31 @@ function SchemaSwitcher() {
   )
 }
 
+function CurrentUserBadge() {
+  // Small "who am I" strip above the logout button. Pulls /users/me once on
+  // mount; fails silently if /me isn't reachable so a 401/unknown endpoint
+  // can never break the rest of the sidebar.
+  const [me, setMe] = useState(null)
+  useEffect(() => { fetchMe().then(setMe).catch(() => {}) }, [])
+  if (!me) return null
+  const initials = (me.fio || me.username).split(/\s+/).slice(0, 2).map(s => s[0]?.toUpperCase()).join('')
+  return (
+    <div className="px-6 py-3 border-t border-gray-800 flex items-center gap-3">
+      <div className="h-9 w-9 shrink-0 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-semibold flex items-center justify-center text-sm">
+        {initials || '?'}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-sm font-semibold text-white truncate">
+          {me.fio || me.username}
+        </div>
+        <div className="text-[11px] text-gray-400 font-mono truncate">
+          {me.username} · {me.role}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Layout({ children, onLogout }) {
   const navigate = useNavigate()
   const links = [
@@ -143,11 +170,17 @@ function Layout({ children, onLogout }) {
     { to: '/playground', icon: <Play size={18} />, label: 'Playground' },
     { to: '/sessions', icon: <Users size={18} />, label: 'Сессии' },
     { to: '/schemas', icon: <Layers size={18} />, label: 'Схемы' },
+    { to: '/users', icon: <UserCog size={18} />, label: 'Пользователи' },
+    { to: '/audit', icon: <History size={18} />, label: 'Журнал' },
   ]
 
   return (
-    <div className="min-h-screen flex">
-      <nav className="w-64 bg-gray-900 text-white flex flex-col shrink-0">
+    // h-screen (not min-h-screen) locks the root to the viewport and lets
+    // <main> own the vertical scroll. Without this, long pages push the
+    // whole layout taller than the viewport and the sidebar's bottom
+    // (badge + logout) drops below the fold.
+    <div className="h-screen flex">
+      <nav className="w-64 bg-gray-900 text-white flex flex-col shrink-0 h-full">
         <div className="p-6 border-b border-gray-700">
           <div className="flex flex-col items-center text-center">
             <Link
@@ -168,7 +201,7 @@ function Layout({ children, onLogout }) {
           </div>
         </div>
         <SchemaSwitcher />
-        <div className="flex-1 py-4 overflow-auto">
+        <div className="flex-1 py-4 overflow-auto app-sidebar-scroll">
           {links.map((l) => (
             <Link
               key={l.to}
@@ -180,6 +213,7 @@ function Layout({ children, onLogout }) {
             </Link>
           ))}
         </div>
+        <CurrentUserBadge />
         <button
           onClick={() => { onLogout(); navigate('/'); }}
           className="flex items-center gap-3 px-6 py-4 text-gray-400 hover:text-white border-t border-gray-700 transition"
@@ -188,7 +222,7 @@ function Layout({ children, onLogout }) {
           <span>Выйти</span>
         </button>
       </nav>
-      <main className="flex-1 bg-gray-50 overflow-auto">{children}</main>
+      <main className="flex-1 bg-gray-50 overflow-auto h-full">{children}</main>
     </div>
   )
 }
@@ -218,6 +252,8 @@ export default function App() {
             <Route path="/finals/:finalId" element={<FinalEditor />} />
             <Route path="/sessions" element={<SessionsList />} />
             <Route path="/schemas" element={<SchemasList />} />
+            <Route path="/users" element={<UsersList />} />
+            <Route path="/audit" element={<AuditLog />} />
             <Route path="/playground" element={<Playground />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

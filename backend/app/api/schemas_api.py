@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models import (
-    Schema, Node, Option, Edge, Final, Classification, AuditLog, User,
+    Schema, Node, Option, Edge, Final, Classification, Section, AuditLog, User,
     DEFAULT_SCHEMA_ID,
 )
 from app.schemas import SchemaRead, SchemaCreate, SchemaUpdate, SchemaClone
@@ -31,10 +31,45 @@ def _validate_slug(slug: str) -> None:
         )
 
 
+def _project(s: Schema) -> dict:
+    """Return schema data to the client with short-form root_node_id."""
+    return {
+        "id": s.id,
+        "name": s.name,
+        "description": s.description,
+        "root_node_id": short_id(s.root_node_id),
+        "created_at": s.created_at,
+    }
+
+
+async def _resolve_root_node_id(
+    db: AsyncSession, schema_id: str, raw: str | None
+) -> str | None:
+    """Normalise a user-provided root id into the canonical '{schema}::{short}' form.
+
+    Accepts either short ("N000") or already-prefixed form and verifies the node
+    exists in this schema. Empty string clears the root.
+    """
+    if raw is None:
+        return None
+    if raw.strip() == "":
+        return None  # explicit clear
+    fid = full_id(schema_id, raw.strip())
+    node = (await db.execute(
+        select(Node).where(Node.id == fid, Node.schema_id == schema_id)
+    )).scalar_one_or_none()
+    if not node:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Стартовый узел '{raw}' не найден в схеме '{schema_id}'",
+        )
+    return fid
+
+
 @router.get("/", response_model=list[SchemaRead])
 async def list_schemas(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Schema).order_by(Schema.id))
-    return result.scalars().all()
+    return [_project(s) for s in result.scalars().all()]
 
 
 @router.get("/{schema_id}", response_model=SchemaRead)
@@ -42,7 +77,7 @@ async def get_schema(schema_id: str, db: AsyncSession = Depends(get_db)):
     s = (await db.execute(select(Schema).where(Schema.id == schema_id))).scalar_one_or_none()
     if not s:
         raise HTTPException(status_code=404, detail="Schema not found")
-    return s
+    return _project(s)
 
 
 @router.post("/", response_model=SchemaRead, status_code=201)
@@ -56,7 +91,23 @@ async def create_schema(
     if exists:
         raise HTTPException(status_code=409, detail=f"Schema '{body.id}' already exists")
     s = Schema(id=body.id, name=body.name, description=body.description)
+    if body.root_node_id:
+        # On create, the node may not exist yet — just store as full id
+        # without existence validation (user will typically set this later).
+        s.root_node_id = full_id(body.id, body.root_node_id.strip())
     db.add(s)
+    # Seed a single default section so the user can immediately add nodes
+    # without first having to open the Dashboard. They can rename/add more
+    # from the UI afterwards.
+    db.add(Section(
+        id=f"{body.id}::overview",
+        schema_id=body.id,
+        slug="overview",
+        label="Общее",
+        description="Раздел по умолчанию. Переименуйте или добавьте свои на вкладке «Обзор».",
+        color="green",
+        order=0,
+    ))
     db.add(AuditLog(
         user_id=current_user.id, action="create",
         entity_type="schema", entity_id=body.id,
@@ -65,7 +116,7 @@ async def create_schema(
     ))
     await db.commit()
     await db.refresh(s)
-    return s
+    return _project(s)
 
 
 @router.patch("/{schema_id}", response_model=SchemaRead)
@@ -79,6 +130,12 @@ async def update_schema(
     if not s:
         raise HTTPException(status_code=404, detail="Schema not found")
     updates = body.model_dump(exclude_unset=True)
+    # root_node_id needs existence-check + short→full normalisation before we
+    # write it to the DB. Other fields are simple string overwrites.
+    if "root_node_id" in updates:
+        updates["root_node_id"] = await _resolve_root_node_id(
+            db, schema_id, updates.get("root_node_id")
+        )
     for k, v in updates.items():
         setattr(s, k, v)
     db.add(AuditLog(
@@ -88,7 +145,7 @@ async def update_schema(
     ))
     await db.commit()
     await db.refresh(s)
-    return s
+    return _project(s)
 
 
 @router.delete("/{schema_id}", status_code=204)
@@ -140,7 +197,28 @@ async def clone_schema(
         raise HTTPException(status_code=409, detail=f"Schema '{body.new_id}' already exists")
 
     new_schema = Schema(id=body.new_id, name=body.new_name, description=body.description)
+    # Mirror the source's root node (remapped to the new prefix) so the cloned
+    # bot starts exactly where the original did.
+    if src.root_node_id:
+        new_schema.root_node_id = full_id(body.new_id, short_id(src.root_node_id))
     db.add(new_schema)
+    await db.flush()
+
+    # Sections first — they're referenced by Node.section via composite FK,
+    # so nothing later in this function can insert cleanly until they exist.
+    section_rows = (await db.execute(
+        select(Section).where(Section.schema_id == schema_id)
+    )).scalars().all()
+    for sec in section_rows:
+        db.add(Section(
+            id=f"{body.new_id}::{sec.slug}",
+            schema_id=body.new_id,
+            slug=sec.slug,
+            label=sec.label,
+            description=sec.description,
+            color=sec.color,
+            order=sec.order,
+        ))
     await db.flush()
 
     def remap(old: str | None) -> str | None:
@@ -230,4 +308,4 @@ async def clone_schema(
 
     await db.commit()
     await db.refresh(new_schema)
-    return new_schema
+    return _project(new_schema)

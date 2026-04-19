@@ -12,23 +12,7 @@ import {
   AlertTriangle, CheckCircle2, ChevronDown, ChevronUp,
   HelpCircle, X, MousePointer2, Move, Link2, MousePointerClick, Trash2, Plus, GitBranch,
 } from 'lucide-react'
-
-const SECTION_COLORS = {
-  branch_a: { bg: '#fef2f2', border: '#f87171', badge: '#dc2626' },
-  branch_a_vrvp: { bg: '#fdf2f8', border: '#f472b6', badge: '#db2777' },
-  branch_a_egds: { bg: '#fff1f2', border: '#fb7185', badge: '#e11d48' },
-  branch_b: { bg: '#fff7ed', border: '#fb923c', badge: '#ea580c' },
-  branch_b_complaints: { bg: '#fefce8', border: '#facc15', badge: '#ca8a04' },
-  branch_b_polyps: { bg: '#faf5ff', border: '#c084fc', badge: '#9333ea' },
-  branch_b_vrvp: { bg: '#fdf4ff', border: '#e879f9', badge: '#c026d3' },
-  branch_b_erosions: { bg: '#fef2f2', border: '#fca5a5', badge: '#dc2626' },
-  branch_b_ulcers: { bg: '#fff7ed', border: '#fdba74', badge: '#ea580c' },
-  branch_b_ere: { bg: '#f0fdf4', border: '#86efac', badge: '#16a34a' },
-  branch_b_burn: { bg: '#fef2f2', border: '#f87171', badge: '#b91c1c' },
-  branch_b_history: { bg: '#fffbeb', border: '#fcd34d', badge: '#b45309' },
-  branch_c: { bg: '#eff6ff', border: '#93c5fd', badge: '#2563eb' },
-  overview: { bg: '#f0fdf4', border: '#86efac', badge: '#15803d' },
-}
+import { DEFAULT_SECTION_COLOR, resolveSectionColors } from '../utils/sections-ui'
 
 const NODE_W = 240
 const NODE_H = 70
@@ -209,6 +193,10 @@ function TreeViewInner() {
     const q = search.toLowerCase()
     return nodes.filter(n => n.id.toLowerCase().includes(q) || n.text.toLowerCase().includes(q))
   }, [nodes, search])
+
+  // Rebuilt whenever the Dashboard edits section colours so the tree updates
+  // without a full page reload.
+  const sectionColorMap = useMemo(() => resolveSectionColors(sections), [sections])
 
   const finalIds = useMemo(() => new Set(finals.map(f => f.id)), [finals])
 
@@ -617,7 +605,7 @@ function TreeViewInner() {
   // is then appended as a non-interactive pseudo-node in flowNodes.
   const laidOutNodes = useMemo(() => {
     const raw = filteredNodes.map(n => {
-      const colors = SECTION_COLORS[n.section] || { bg: '#f3f4f6', border: '#d1d5db', badge: '#6b7280' }
+      const colors = sectionColorMap[n.section] || DEFAULT_SECTION_COLOR
       const shortText = n.text.length > 45 ? n.text.substring(0, 43) + '...' : n.text
       const isHighlighted = n.id === highlightId
       return {
@@ -1006,7 +994,11 @@ function TreeViewInner() {
           className="border rounded-lg px-2 py-1.5 text-sm"
         >
           <option value="">Все секции</option>
-          {sections.map(s => <option key={s} value={s}>{s}</option>)}
+          {sections.map(s => {
+            const slug = typeof s === 'string' ? s : s.slug
+            const label = typeof s === 'string' ? s : (s.label || s.slug)
+            return <option key={slug} value={slug}>{label}</option>
+          })}
         </select>
         <input
           type="text"
@@ -1101,7 +1093,7 @@ function TreeViewInner() {
             <Controls position="bottom-right" />
             <MiniMap
               zoomable pannable
-              nodeColor={(n) => n.data?.isBounds ? 'transparent' : (SECTION_COLORS[n.data?.section]?.border || '#d1d5db')}
+              nodeColor={(n) => n.data?.isBounds ? 'transparent' : (sectionColorMap[n.data?.section]?.border || '#d1d5db')}
               nodeStrokeColor={(n) => n.data?.isBounds ? 'transparent' : '#9ca3af'}
               style={{ width: 160, height: 100 }}
             />

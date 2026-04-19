@@ -8,7 +8,10 @@ from sqlalchemy.orm import Session as DBSession
 
 from app.config import settings
 from app.db.database import Base
-from app.models import Node, Option, Edge, Final, Classification, User
+from app.models import (
+    Node, Option, Edge, Final, Classification, User, Schema, Section,
+    DEFAULT_SCHEMA_ID,
+)
 
 from passlib.context import CryptContext
 
@@ -32,6 +35,28 @@ def seed_database(drop_existing: bool = False):
         if existing_nodes > 0 and not drop_existing:
             print(f"Database already has {existing_nodes} nodes. Use --drop to re-seed.")
             return
+
+        # Seed the default schema row first so FK (nodes.schema_id -> schemas.id)
+        # resolves cleanly.
+        if not db.query(Schema).filter(Schema.id == DEFAULT_SCHEMA_ID).first():
+            db.add(Schema(id=DEFAULT_SCHEMA_ID, name="Эндо-бот",
+                          description="Исходная схема эндоскопической диагностики"))
+
+        # Pre-create Section rows for every distinct section slug referenced
+        # in decision_tree.json. The composite FK on Node.section requires a
+        # matching Section row; seed.py must therefore insert sections before
+        # nodes. Labels default to the slug and can be edited from Dashboard.
+        distinct_slugs = {node_data.get("section", "unknown") for node_data in tree["nodes"].values()}
+        for slug in distinct_slugs:
+            if not db.query(Section).filter(
+                Section.schema_id == DEFAULT_SCHEMA_ID, Section.slug == slug,
+            ).first():
+                db.add(Section(
+                    id=f"{DEFAULT_SCHEMA_ID}::{slug}",
+                    schema_id=DEFAULT_SCHEMA_ID,
+                    slug=slug, label=slug,
+                ))
+        db.flush()
 
         for node_id, node_data in tree["nodes"].items():
             extra = {}
@@ -132,6 +157,7 @@ def seed_database(drop_existing: bool = False):
         admin = User(
             username="admin",
             password_hash=pwd_context.hash("admin"),
+            fio="Администратор",
             role="admin",
         )
         db.add(admin)

@@ -3,10 +3,12 @@ import { useSchemaContext } from '../schema-context'
 import {
   createSchema, updateSchema, deleteSchema, cloneSchema,
   fetchBot, upsertBot, toggleBotEnabled, deleteBot,
+  fetchNodesFor,
 } from '../api'
 import {
   GitBranch, Copy, Trash2, Plus, Edit3, Check, X,
   Bot as BotIcon, Eye, EyeOff, AlertCircle, Power, Layers, HelpCircle,
+  Play,
 } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 
@@ -18,7 +20,9 @@ export default function SchemasList() {
   const [form, setForm] = useState({ id: '', name: '', description: '' })
   const [cloneTarget, setCloneTarget] = useState(null)  // {fromId, new_id, new_name}
   const [editingId, setEditingId] = useState(null)
-  const [editDraft, setEditDraft] = useState({ name: '', description: '' })
+  const [editDraft, setEditDraft] = useState({ name: '', description: '', root_node_id: '' })
+  const [editNodes, setEditNodes] = useState([])  // nodes of the schema currently being edited
+  const [editNodesLoading, setEditNodesLoading] = useState(false)
   const [error, setError] = useState('')
   const [botGuideOpen, setBotGuideOpen] = useState(false)
 
@@ -93,14 +97,37 @@ export default function SchemasList() {
     }
   }
 
-  function startEdit(s) {
+  async function startEdit(s) {
     setEditingId(s.id)
-    setEditDraft({ name: s.name, description: s.description || '' })
+    setEditDraft({
+      name: s.name,
+      description: s.description || '',
+      root_node_id: s.root_node_id || '',
+    })
+    // Lazy-load this schema's nodes so the root-node <select> is populated
+    // without forcing the user to switch the active schema first.
+    setEditNodes([])
+    setEditNodesLoading(true)
+    try {
+      const nodes = await fetchNodesFor(s.id)
+      setEditNodes(nodes || [])
+    } catch (e) {
+      console.warn('Failed to load nodes for schema', s.id, e)
+    } finally {
+      setEditNodesLoading(false)
+    }
   }
 
   async function saveEdit() {
     try {
-      await updateSchema(editingId, editDraft)
+      // Trim + coerce empty string to null so the server clears the column
+      // instead of treating "" as a (non-existent) node id.
+      const payload = {
+        name: editDraft.name,
+        description: editDraft.description,
+        root_node_id: editDraft.root_node_id?.trim() || '',
+      }
+      await updateSchema(editingId, payload)
       setEditingId(null)
       await reload()
     } catch (e) {
@@ -281,6 +308,39 @@ export default function SchemasList() {
                         placeholder="Описание (опционально)"
                         rows={2}
                       />
+                      <div>
+                        <label className="flex items-center gap-1.5 text-xs text-gray-600 mb-1">
+                          <Play size={12} className="text-blue-600" />
+                          <span>Стартовый узел</span>
+                          <span className="text-gray-400 font-normal">
+                            — с него бот начинает диалог после /start
+                          </span>
+                        </label>
+                        <select
+                          className="w-full border rounded-lg px-3 py-1.5 text-sm bg-white"
+                          value={editDraft.root_node_id}
+                          onChange={(e) => setEditDraft({ ...editDraft, root_node_id: e.target.value })}
+                          disabled={editNodesLoading}
+                        >
+                          <option value="">
+                            {editNodesLoading
+                              ? 'Загрузка узлов...'
+                              : editNodes.length === 0
+                                ? '— нет узлов в схеме —'
+                                : '— не задан (бот будет молчать) —'}
+                          </option>
+                          {editNodes.map((n) => (
+                            <option key={n.id} value={n.id}>
+                              {n.id} — {truncate(n.text, 80)}
+                            </option>
+                          ))}
+                        </select>
+                        {!editNodesLoading && editNodes.length === 0 && (
+                          <p className="text-[11px] text-orange-700 mt-1">
+                            В схеме пока нет узлов. Добавьте их на странице «Узлы», затем вернитесь сюда и укажите стартовый.
+                          </p>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <>
@@ -289,6 +349,18 @@ export default function SchemasList() {
                         <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{s.id}</span>
                         {isActive && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-semibold">активна</span>}
                         {isEndo && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded font-semibold">базовая</span>}
+                        {s.root_node_id ? (
+                          <span className="inline-flex items-center gap-1 text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded font-mono">
+                            <Play size={10} /> старт: {s.root_node_id}
+                          </span>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 text-xs bg-orange-50 text-orange-800 border border-orange-200 px-2 py-0.5 rounded font-semibold"
+                            title="Бот не сможет начать диалог, пока вы не укажете стартовый узел"
+                          >
+                            <AlertCircle size={11} /> стартовый узел не задан
+                          </span>
+                        )}
                       </div>
                       {s.description && <p className="text-sm text-gray-600 mt-1">{s.description}</p>}
                     </>
@@ -439,6 +511,11 @@ export default function SchemasList() {
       )}
     </div>
   )
+}
+
+function truncate(s, n) {
+  if (!s) return ''
+  return s.length > n ? s.slice(0, n - 1) + '…' : s
 }
 
 function Modal({ children, onClose, title }) {

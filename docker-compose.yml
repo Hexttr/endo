@@ -33,15 +33,20 @@ services:
     ports:
       - "8000:8000"
 
+  # Multi-bot orchestrator. One long-lived process that reads the `bots` table
+  # and supervises one Telegram Application per row. Replaces the legacy
+  # single-bot `bot/main.py` — running both at once causes Telegram Conflict
+  # 409s (two getUpdates pollers on the same token), which is exactly what
+  # broke the original bot when a second schema/bot was introduced.
   bot:
     build:
       context: ./bot
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.orchestrator
     restart: unless-stopped
     depends_on:
       - backend
     environment:
-      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN}
+      DATABASE_URL: postgresql+asyncpg://endo:endo@postgres:5432/endo_bot
       API_BASE_URL: http://backend:8000/api
 
   admin:

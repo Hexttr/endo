@@ -1,27 +1,55 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
-  fetchNode, updateNode, fetchNodes, fetchFinals, fetchEdges,
+  fetchNode, updateNode, fetchNodes, fetchFinals, fetchEdges, fetchSections,
   createOption, updateOption, deleteOption,
 } from '../api'
-import { Save, Map, Plus, Trash2, ExternalLink, Info, CircleDot } from 'lucide-react'
+import { Save, Map, Plus, Trash2, ExternalLink, Info, CircleDot, HelpCircle } from 'lucide-react'
 import { PageHeader } from '../components/PageHeader'
 
-const INPUT_TYPE_HELP = {
-  info: 'Информационный блок. Пользователь видит текст и нажимает «Далее».',
-  action: 'Действие / назначение. Показывается инструкция, пользователь подтверждает.',
-  single_choice: 'Выбор одного варианта из списка.',
-  multi_choice: 'Выбор нескольких вариантов (чекбоксы). Можно выбрать несколько и нажать «Готово».',
-  yes_no: 'Вопрос Да / Нет / Не знаю.',
-  numeric: 'Ввод числовых значений (лабораторные данные: Hb, PLT и др.).',
-  auto: 'Автоматическая маршрутизация по правилам. Не показывается пользователю — бот переходит к следующему узлу сам.',
-}
+const INPUT_TYPES = [
+  { value: 'info',          label: 'Информация',        help: 'Информационный блок. Пользователь видит текст и нажимает «Далее».' },
+  { value: 'action',        label: 'Действие',          help: 'Действие / назначение. Показывается инструкция, пользователь её подтверждает.' },
+  { value: 'single_choice', label: 'Один вариант',      help: 'Выбор одного варианта из нескольких.' },
+  { value: 'multi_choice',  label: 'Несколько вариантов', help: 'Можно выбрать несколько пунктов (чекбоксы) и нажать «Готово».' },
+  { value: 'yes_no',        label: 'Да / Нет',          help: 'Вопрос с ответами Да / Нет / Не знаю.' },
+  { value: 'numeric',       label: 'Число',             help: 'Ввод числового значения (например, лабораторные данные Hb, PLT).' },
+  { value: 'auto',          label: 'Авто-маршрут',      help: 'Автоматический переход к следующему узлу по правилам. Пользователю не показывается.' },
+]
+const INPUT_TYPE_HELP = Object.fromEntries(INPUT_TYPES.map(t => [t.value, t.help]))
 
-const UNKNOWN_ACTION_HELP = {
-  '': 'Не задано — кнопка «Не знаю» не будет показана.',
-  safe_default: 'Безопасный путь: если пользователь не знает ответ, выбирается безопасный вариант (последний / «Нет»).',
-  branch_c: 'Перенаправляет в ветку C (неопределённая ситуация) для дообследования.',
-  skip_with_flag: 'Пропускает вопрос, ставит флаг «данные отсутствуют» в отчёте.',
+const UNKNOWN_ACTIONS = [
+  { value: '',               label: 'Не задано',                help: 'Кнопка «Не знаю» не будет показана пользователю.' },
+  { value: 'safe_default',   label: 'Безопасный по умолчанию',  help: 'Если пользователь не знает ответ — выбирается безопасный вариант (обычно последний в списке или «Нет»).' },
+  { value: 'branch_c',       label: 'Ветка «Не определено»',    help: 'Перенаправляет пользователя в ветку для неопределённых ситуаций, требующих дообследования.' },
+  { value: 'skip_with_flag', label: 'Пропустить с пометкой',    help: 'Пропускает вопрос и ставит флаг «данные отсутствуют» в итоговом отчёте.' },
+]
+const UNKNOWN_ACTION_HELP = Object.fromEntries(UNKNOWN_ACTIONS.map(a => [a.value, a.help]))
+
+// Reusable popover used by the "?" icons next to Terminal / Pending / Return.
+// Kept inside this file to avoid a tiny new component.
+function InlineHelp({ title, children }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        className="text-gray-400 hover:text-blue-600 cursor-help"
+        aria-label="Подсказка"
+      >
+        <HelpCircle size={14} />
+      </button>
+      {open && (
+        <span className="absolute z-20 left-full ml-2 top-1/2 -translate-y-1/2 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-lg leading-relaxed">
+          {title && <div className="font-semibold mb-1">{title}</div>}
+          {children}
+          <span className="absolute right-full top-1/2 -translate-y-1/2 border-[6px] border-transparent border-r-gray-900" />
+        </span>
+      )}
+    </span>
+  )
 }
 
 const SECTION_LABELS = {
@@ -53,6 +81,7 @@ export default function NodeEditor() {
   const [allNodes, setAllNodes] = useState([])
   const [allFinals, setAllFinals] = useState([])
   const [allEdges, setAllEdges] = useState([])
+  const [sections, setSections] = useState([])
 
   const [optionEdits, setOptionEdits] = useState({})
   const [newOption, setNewOption] = useState(null)
@@ -61,6 +90,7 @@ export default function NodeEditor() {
     fetchNode(nodeId).then(n => {
       setNode(n)
       setForm({
+        section: n.section,
         text: n.text,
         description: n.description || '',
         input_type: n.input_type,
@@ -73,7 +103,15 @@ export default function NodeEditor() {
     fetchNodes().then(setAllNodes).catch(() => {})
     fetchFinals().then(setAllFinals).catch(() => {})
     fetchEdges().then(setAllEdges).catch(() => {})
+    fetchSections().then(setSections).catch(() => {})
   }, [nodeId])
+
+  const currentSection = useMemo(
+    () => sections.find(s => (typeof s === 'object' ? s.slug : s) === node?.section),
+    [sections, node],
+  )
+  const sectionLabel = currentSection?.label || SECTION_LABELS[node?.section] || null
+  const sectionDescription = currentSection?.description || null
 
   const targetOptions = useMemo(() => {
     const items = []
@@ -104,6 +142,7 @@ export default function NodeEditor() {
     setError('')
     try {
       const updates = {}
+      if (form.section !== node.section) updates.section = form.section
       if (form.text !== node.text) updates.text = form.text
       if (form.description !== (node.description || '')) updates.description = form.description || null
       if (form.input_type !== node.input_type) updates.input_type = form.input_type
@@ -181,8 +220,8 @@ export default function NodeEditor() {
         title={<>Узел: <span className="text-blue-600">{node.id}</span></>}
       >
         <div className="flex items-center gap-3 flex-wrap justify-end">
-          <span className="px-3 py-1 bg-gray-100 rounded-full text-sm" title={SECTION_LABELS[node.section] || ''}>
-            {node.section}
+          <span className="px-3 py-1 bg-gray-100 rounded-full text-sm" title={sectionLabel || ''}>
+            {sectionLabel || node.section}
           </span>
           <button
             type="button"
@@ -201,15 +240,46 @@ export default function NodeEditor() {
       {error && <div className="bg-red-50 text-red-700 p-3 rounded-lg mb-4 text-sm">{error}</div>}
 
       {/* Section description */}
-      {SECTION_LABELS[node.section] && (
+      {(sectionLabel || sectionDescription) && (
         <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm text-blue-800">
           <Info size={16} className="mt-0.5 shrink-0" />
-          {SECTION_LABELS[node.section]}
+          <div>
+            {sectionLabel && <div className="font-semibold">{sectionLabel}</div>}
+            {sectionDescription && <div className="mt-0.5">{sectionDescription}</div>}
+          </div>
         </div>
       )}
 
       {/* Main form */}
       <div className="bg-white rounded-xl shadow-sm border p-6 space-y-5">
+        <div>
+          <label className="flex items-center gap-1.5 text-sm font-semibold text-gray-700 mb-1">
+            Секция
+            <InlineHelp title="К какой секции относится узел">
+              Группировка узлов по смыслу. Списком секций, их названиями,
+              цветами и описаниями управляет вкладка «Обзор». Смена секции
+              просто перемещает узел в другую группу — ни связи, ни варианты
+              при этом не меняются.
+            </InlineHelp>
+          </label>
+          <select
+            value={form.section || ''}
+            onChange={(e) => setForm({ ...form, section: e.target.value })}
+            className="w-full border rounded-lg px-4 py-2.5 bg-white"
+          >
+            {/* Fallback option so the current slug is always selectable even
+                if /api/sections didn't load yet or the slug is obsolete. */}
+            {!sections.some(s => (typeof s === 'object' ? s.slug : s) === form.section) && form.section && (
+              <option value={form.section}>{form.section} (вне списка)</option>
+            )}
+            {sections.map(s => {
+              const slug = typeof s === 'string' ? s : s.slug
+              const label = typeof s === 'string' ? s : (s.label || s.slug)
+              return <option key={slug} value={slug}>{label}</option>
+            })}
+          </select>
+        </div>
+
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">Текст вопроса</label>
           <textarea
@@ -238,8 +308,8 @@ export default function NodeEditor() {
               onChange={(e) => setForm({ ...form, input_type: e.target.value })}
               className="w-full border rounded-lg px-4 py-2.5"
             >
-              {Object.keys(INPUT_TYPE_HELP).map(k => (
-                <option key={k} value={k}>{k}</option>
+              {INPUT_TYPES.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
             <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
@@ -247,16 +317,17 @@ export default function NodeEditor() {
             </p>
           </div>
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Действие при «Не знаю»</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">
+              Действие при «Не знаю»
+            </label>
             <select
               value={form.unknown_action}
               onChange={(e) => setForm({ ...form, unknown_action: e.target.value })}
               className="w-full border rounded-lg px-4 py-2.5"
             >
-              <option value="">Не задано</option>
-              <option value="safe_default">safe_default</option>
-              <option value="branch_c">branch_c</option>
-              <option value="skip_with_flag">skip_with_flag</option>
+              {UNKNOWN_ACTIONS.map(a => (
+                <option key={a.value || 'empty'} value={a.value}>{a.label}</option>
+              ))}
             </select>
             <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
               {UNKNOWN_ACTION_HELP[form.unknown_action]}
@@ -274,7 +345,11 @@ export default function NodeEditor() {
               className="rounded"
             />
             <span>Терминальный</span>
-            <span className="text-gray-400 text-xs" title="Сессия завершается с этим узлом">(?)</span>
+            <InlineHelp title="Терминальный узел">
+              На этом узле диалог с пользователем завершается. Бот больше
+              не задаёт вопросов и показывает итоговое заключение или диагноз.
+              Используется для финальных веток и отказа в обследовании.
+            </InlineHelp>
           </label>
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input
@@ -284,10 +359,23 @@ export default function NodeEditor() {
               className="rounded"
             />
             <span>Ожидание</span>
-            <span className="text-gray-400 text-xs" title="Сессия приостанавливается (необходимо дообследование)">(?)</span>
+            <InlineHelp title="Узел ожидания">
+              Диалог приостанавливается: бот сообщает, что нужно получить
+              дополнительные данные (например, сдать анализы). Пользователь
+              вернётся позже, и сессия продолжится с узла, указанного в поле
+              «Узел возврата».
+            </InlineHelp>
           </label>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">Узел возврата</label>
+            <label className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+              Узел возврата
+              <InlineHelp title="Куда вернуться после ожидания">
+                Короткий ID узла (например, <span className="font-mono">A020</span>),
+                на который бот вернёт пользователя, когда тот возобновит сессию.
+                Используется совместно с флагом «Ожидание». Оставьте пустым,
+                если возврат не нужен.
+              </InlineHelp>
+            </label>
             <input
               type="text"
               value={form.return_node}

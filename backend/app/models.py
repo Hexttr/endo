@@ -1,6 +1,7 @@
 import datetime
 from sqlalchemy import (
-    Column, String, Text, Integer, Boolean, DateTime, Float, ForeignKey, JSON, Index
+    Column, String, Text, Integer, Boolean, DateTime, Float, ForeignKey, JSON, Index,
+    ForeignKeyConstraint, UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 import enum
@@ -40,7 +41,44 @@ class Schema(Base):
     id = Column(String(50), primary_key=True)
     name = Column(Text, nullable=False)
     description = Column(Text, nullable=True)
+    # Full-id of the node where /start begins. Stored as "{schema_id}::{short_id}".
+    # Nullable for backward compatibility — engine falls back to N000 if unset.
+    root_node_id = Column(String(200), nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class Section(Base):
+    """A named grouping of nodes within a schema (e.g. "branch_a", "overview").
+
+    Holds the human-readable label, description and UI colour. Previously this
+    metadata lived hardcoded in the admin frontend (SECTION_LABELS /
+    SECTION_COLORS); moving it here lets non-technical users edit sections from
+    the Dashboard and keeps every schema-scoped.
+
+    The slug column is what Node.section references via a composite FK
+    (schema_id, section) -> (schema_id, slug). `ON UPDATE CASCADE` lets us
+    rename a section slug in one place and have every node follow along.
+    """
+    __tablename__ = "sections"
+
+    # Full id ("{schema_id}::{slug}") mirrors the Node/Final convention so it's
+    # globally unique across schemas.
+    id = Column(String(200), primary_key=True)
+    schema_id = Column(String(50), ForeignKey("schemas.id", ondelete="CASCADE"),
+                       nullable=False, index=True)
+    slug = Column(String(100), nullable=False)
+    label = Column(String(200), nullable=False)
+    description = Column(Text, nullable=True)
+    # Tailwind preset key or a raw hex colour — renderer accepts both.
+    color = Column(String(30), nullable=True)
+    # Manual ordering inside the Dashboard / filters. Lower = earlier.
+    order = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        # (schema_id, slug) must be unique so Node's composite FK can target it.
+        UniqueConstraint("schema_id", "slug", name="uq_section_schema_slug"),
+    )
 
 
 class Node(Base):
@@ -68,6 +106,19 @@ class Node(Base):
 
     options = relationship("Option", back_populates="node", cascade="all, delete-orphan")
     edges_from = relationship("Edge", foreign_keys="Edge.from_node_id", back_populates="from_node", cascade="all, delete-orphan")
+
+    # Composite FK ties (schema_id, section) to (sections.schema_id, sections.slug).
+    # ON UPDATE CASCADE means renaming a section slug in the UI auto-propagates
+    # to every node that references it, zero-downtime.
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["schema_id", "section"],
+            ["sections.schema_id", "sections.slug"],
+            name="nodes_section_fkey",
+            onupdate="CASCADE",
+            ondelete="RESTRICT",
+        ),
+    )
 
     def __repr__(self):
         return f"<Node {self.id}: {self.text[:40]}>"
@@ -148,6 +199,10 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(100), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
+    # Human-readable full name ("Иванов Иван Иванович"). Optional but shown
+    # in the admin panel user list and audit log once set.
+    fio = Column(String(200), nullable=True)
+    # Roles: 'admin' (user CRUD + all editor perms), 'editor' (schema CRUD).
     role = Column(String(20), default="editor")
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
