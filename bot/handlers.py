@@ -75,6 +75,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     node = data.get("current_node")
     if node:
         return await _present_node_as_new_message(update.message, context, node)
+
+    # No starting node resolved — the schema hasn't been wired up yet. Relay
+    # the server-provided explanation so the end-user understands this is a
+    # configuration issue, not a bot crash.
+    msg = data.get("message") or (
+        "⚠ Этот бот ещё не настроен: не задан стартовый узел схемы. "
+        "Пожалуйста, обратитесь к администратору."
+    )
+    await update.message.reply_text(msg)
     return CONVERSING
 
 
@@ -82,6 +91,25 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     context.user_data.clear()
     await update.message.reply_text("Диагностика отменена. Для нового сеанса: /start")
     return ConversationHandler.END
+
+
+async def unknown_fallback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Safety net: fires when a message reaches the conversation but matches
+    nothing in the current state (e.g. user types free-form text inside a
+    button-only step, or sends /start after a stale end). Keeps the bot from
+    ever going completely silent — which from the user's side is indistinguishable
+    from "the bot is broken".
+    """
+    text = (update.effective_message.text or "").strip() if update.effective_message else ""
+    if text.lower().startswith("/start"):
+        # Explicit restart: re-run the entry point instead of silently dropping.
+        context.user_data.clear()
+        return await start_command(update, context)
+    await update.effective_message.reply_text(
+        "Чтобы начать или перезапустить диагностику, отправьте /start.\n"
+        "Для отмены — /cancel."
+    )
+    return CONVERSING
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -494,7 +522,17 @@ def get_conversation_handler() -> ConversationHandler:
                 CallbackQueryHandler(callback_handler),
             ],
         },
-        fallbacks=[CommandHandler("cancel", cancel_command)],
+        # /start and any other message must ALWAYS produce a response, even if
+        # the user is already in a state. Without allow_reentry=True, /start is
+        # silently dropped once the user has an active conversation — the bot
+        # appears dead from the outside. The catch-all MessageHandler is the
+        # last line of defence: if nothing above matched, we still respond.
+        fallbacks=[
+            CommandHandler("start", start_command),
+            CommandHandler("cancel", cancel_command),
+            MessageHandler(filters.ALL, unknown_fallback),
+        ],
+        allow_reentry=True,
         per_user=True,
         per_chat=True,
     )
