@@ -252,14 +252,22 @@ export function DiagnosticSummary({ collectedData, unknownFlags, sessionId, comp
 
 function TranscriptRow({ msg, compactNodeMeta }) {
   const nodeMetaClass = compactNodeMeta ? 'hidden' : 'text-[11px] font-mono text-blue-700 mb-1'
+  const botBorder = 'rgb(0 100 170)'
+  const userBorder = 'rgb(130 205 0)'
 
   if (msg.role === 'bot' && msg.kind === 'question') {
     return (
       <div className="flex gap-2 items-start">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-blue-200 bg-blue-100 shadow-sm">
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border bg-blue-100 shadow-sm"
+          style={{ borderColor: botBorder }}
+        >
           <BotIcon size={16} className="text-blue-800" />
         </div>
-        <div className="max-w-[84%] rounded-3xl rounded-tl-sm border-2 border-blue-200 bg-sky-100 px-4 py-3 shadow-sm">
+        <div
+          className="max-w-[84%] rounded-3xl rounded-tl-sm border-2 bg-sky-100 px-4 py-3 shadow-sm"
+          style={{ borderColor: botBorder }}
+        >
           <div className={nodeMetaClass}>{msg.node.id}</div>
           <div className="text-sm whitespace-pre-wrap">{msg.node.text}</div>
           {msg.node.description && (
@@ -273,10 +281,16 @@ function TranscriptRow({ msg, compactNodeMeta }) {
   if (msg.role === 'bot' && msg.kind === 'answered') {
     return (
       <div className="flex gap-2 items-start">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-blue-200 bg-blue-100 shadow-sm">
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border bg-blue-100 shadow-sm"
+          style={{ borderColor: botBorder }}
+        >
           <BotIcon size={16} className="text-blue-800" />
         </div>
-        <div className="max-w-[84%] rounded-3xl rounded-tl-sm border-2 border-blue-200 bg-sky-100 px-4 py-3 shadow-sm">
+        <div
+          className="max-w-[84%] rounded-3xl rounded-tl-sm border-2 bg-sky-100 px-4 py-3 shadow-sm"
+          style={{ borderColor: botBorder }}
+        >
           <div className={nodeMetaClass}>{msg.node.id}</div>
           <div className="text-sm whitespace-pre-wrap">{msg.node.text}</div>
           <div className="mt-2 flex items-center gap-1 border-t border-blue-300 pt-2 text-xs text-blue-900">
@@ -291,10 +305,16 @@ function TranscriptRow({ msg, compactNodeMeta }) {
   if (msg.role === 'user') {
     return (
       <div className="flex gap-2 items-start justify-end">
-        <div className="max-w-[76%] rounded-3xl rounded-tr-sm border-2 border-lime-300 bg-lime-100 px-4 py-2.5 text-slate-900 shadow-sm">
+        <div
+          className="max-w-[76%] rounded-3xl rounded-tr-sm border-2 bg-lime-100 px-4 py-2.5 text-slate-900 shadow-sm"
+          style={{ borderColor: userBorder }}
+        >
           <div className="text-sm">{msg.text}</div>
         </div>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-lime-300 bg-lime-100 shadow-sm">
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border bg-lime-100 shadow-sm"
+          style={{ borderColor: userBorder }}
+        >
           <User size={16} className="text-lime-800" />
         </div>
       </div>

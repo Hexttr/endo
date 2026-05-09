@@ -23,7 +23,7 @@ export default function PublicDiagnosisPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-blue-200 bg-[#1d4ed8] text-white shadow-[0_16px_40px_rgba(29,78,216,0.22)]">
+      <header className="border-b border-[#005f9f] bg-[rgb(0_100_170)] text-white shadow-[0_16px_40px_rgba(0,100,170,0.22)]">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 sm:py-7">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="min-w-0">
@@ -64,7 +64,7 @@ export default function PublicDiagnosisPage() {
       <main className="mx-auto max-w-5xl px-4 py-4 sm:px-6 sm:py-6">
         <section className="min-w-0">
           <div className="overflow-hidden rounded-[28px] border border-blue-200 bg-white shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
-            <div className="border-b border-blue-200 bg-[#2563eb] px-4 py-4 text-white sm:px-6">
+            <div className="border-b border-[#005f9f] bg-[rgb(0_100_170)] px-4 py-4 text-white sm:px-6">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 text-white">
                   <MessageSquareText size={19} />
