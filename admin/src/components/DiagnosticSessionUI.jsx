@@ -45,8 +45,11 @@ export function DiagnosticAnswerControls({
 }) {
   const type = node.input_type || 'info'
   const options = node.options || []
+  const hasUnknownOption = options.some(o => o.option_id === 'unknown')
   const spin = loading && <Loader2 size={12} className="animate-spin inline ml-1" />
   const baseBtn = mobileFriendly ? 'px-4 py-3 text-sm' : 'px-3 py-2 text-sm'
+  const unknownBtn = `${baseBtn} bg-red-50 border-2 border-red-300 text-red-700 hover:bg-red-100 rounded-lg font-medium disabled:opacity-50`
+  const subtleUnknownBtn = `${mobileFriendly ? 'px-4 py-3' : 'px-4 py-2'} bg-red-50 border-2 border-red-300 text-red-700 hover:bg-red-100 rounded-lg text-sm font-medium disabled:opacity-50`
 
   if (type === 'single_choice' || type === 'yes_no') {
     return (
@@ -56,16 +59,20 @@ export function DiagnosticAnswerControls({
             key={o.option_id}
             disabled={loading}
             onClick={() => onChoice(o)}
-            className={`${baseBtn} bg-white border-2 border-blue-500 text-blue-700 hover:bg-blue-50 rounded-lg font-medium disabled:opacity-50`}
+            className={
+              o.option_id === 'unknown'
+                ? unknownBtn
+                : `${baseBtn} bg-white border-2 border-blue-500 text-blue-700 hover:bg-blue-50 rounded-lg font-medium disabled:opacity-50`
+            }
           >
             {o.label}
           </button>
         ))}
-        {node.unknown_action && (
+        {node.unknown_action && !hasUnknownOption && (
           <button
             disabled={loading}
             onClick={onUnknown}
-            className={`${baseBtn} bg-white border border-dashed border-gray-400 text-gray-600 hover:bg-gray-100 rounded-lg flex items-center gap-1 disabled:opacity-50`}
+            className={`${unknownBtn} flex items-center gap-1`}
           >
             <HelpCircle size={14} /> Данные отсутствуют
           </button>
@@ -108,7 +115,7 @@ export function DiagnosticAnswerControls({
           <button
             disabled={loading}
             onClick={onMultiUnknown}
-            className={`${mobileFriendly ? 'px-4 py-3' : 'px-4 py-2'} bg-white border border-dashed border-gray-400 text-gray-600 hover:bg-gray-100 rounded-lg text-sm disabled:opacity-50`}
+            className={subtleUnknownBtn}
           >
             Данные отсутствуют
           </button>
@@ -156,9 +163,9 @@ export function DiagnosticAnswerControls({
               <button
                 disabled={loading}
                 onClick={onUnknown}
-                className={`${mobileFriendly ? 'px-4 py-3' : 'px-4 py-2'} bg-white border border-dashed border-gray-400 text-gray-600 hover:bg-gray-100 rounded-lg text-sm disabled:opacity-50`}
+                className={subtleUnknownBtn}
               >
-                Нет данных
+                Данные отсутствуют
               </button>
             </div>
           </>
