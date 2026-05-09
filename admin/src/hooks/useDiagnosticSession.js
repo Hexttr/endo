@@ -20,6 +20,7 @@ export function useDiagnosticSession({
   const scrollRef = useRef(null)
   const startSessionApiRef = useRef(startSessionApi)
   const submitAnswerApiRef = useRef(submitAnswerApi)
+  const autoAdvancedNodeIdRef = useRef(null)
 
   useEffect(() => {
     startSessionApiRef.current = startSessionApi
@@ -42,6 +43,7 @@ export function useDiagnosticSession({
     setUnknownFlags([])
     setMultiSelected(new Set())
     setFieldInputs({})
+    autoAdvancedNodeIdRef.current = null
     try {
       const userId = `${userIdPrefix}-${Date.now()}`
       const data = await startSessionApiRef.current(userId, { schemaId })
@@ -73,19 +75,22 @@ export function useDiagnosticSession({
     }
   }, [transcript, finalResult])
 
-  const submitAnswer = useCallback(async (answer, displayLabel) => {
+  const submitAnswer = useCallback(async (answer, displayLabel, options = {}) => {
     if (!sessionId || !currentNode) return
+    const { silent = false } = options
     setLoading(true)
     setError('')
-    setTranscript(t => {
-      const last = t[t.length - 1]
-      const updated = t.slice()
-      if (last && last.kind === 'question') {
-        updated[updated.length - 1] = { ...last, kind: 'answered', answerLabel: displayLabel }
-      }
-      updated.push({ role: 'user', kind: 'answer', text: displayLabel })
-      return updated
-    })
+    if (!silent) {
+      setTranscript(t => {
+        const last = t[t.length - 1]
+        const updated = t.slice()
+        if (last && last.kind === 'question') {
+          updated[updated.length - 1] = { ...last, kind: 'answered', answerLabel: displayLabel }
+        }
+        updated.push({ role: 'user', kind: 'answer', text: displayLabel })
+        return updated
+      })
+    }
 
     try {
       const data = await submitAnswerApiRef.current(sessionId, currentNode.id, answer, { schemaId })
@@ -129,6 +134,22 @@ export function useDiagnosticSession({
       setLoading(false)
     }
   }, [addQuestionToTranscript, currentNode, schemaId, sessionId])
+
+  useEffect(() => {
+    if (!currentNode || loading || finalResult) return
+
+    const shouldAutoAdvance =
+      currentNode.input_type === 'info' &&
+      !currentNode.is_terminal &&
+      !currentNode.is_pending &&
+      (currentNode.options?.length || 0) === 0
+
+    if (!shouldAutoAdvance) return
+    if (autoAdvancedNodeIdRef.current === currentNode.id) return
+
+    autoAdvancedNodeIdRef.current = currentNode.id
+    submitAnswer('next', 'Далее', { silent: true })
+  }, [currentNode, finalResult, loading, submitAnswer])
 
   const handleChoice = useCallback((option) => {
     submitAnswer(option.option_id, option.label)
