@@ -13,6 +13,7 @@ import SchemasList from './pages/SchemasList'
 import UsersList from './pages/UsersList'
 import Playground from './pages/Playground'
 import AuditLog from './pages/AuditLog'
+import PublicDiagnosisPage from './pages/PublicDiagnosisPage'
 import {
   LayoutDashboard, GitBranch, List, FileText, Users, LogOut,
   Layers, ChevronDown, Play, User, Lock, UserCog, History,
@@ -235,30 +236,38 @@ export default function App() {
     setLoggedIn(false)
   }
 
-  if (!loggedIn) {
-    return <LoginPage onLogin={() => setLoggedIn(true)} />
-  }
-
   return (
     <BrowserRouter>
-      <SchemaProvider>
-        <Layout onLogout={handleLogout}>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/tree" element={<TreeView />} />
-            <Route path="/nodes" element={<NodeList />} />
-            <Route path="/nodes/:nodeId" element={<NodeEditor />} />
-            <Route path="/finals" element={<FinalsList />} />
-            <Route path="/finals/:finalId" element={<FinalEditor />} />
-            <Route path="/sessions" element={<SessionsList />} />
-            <Route path="/schemas" element={<SchemasList />} />
-            <Route path="/users" element={<UsersList />} />
-            <Route path="/audit" element={<AuditLog />} />
-            <Route path="/playground" element={<Playground />} />
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
-        </Layout>
-      </SchemaProvider>
+      <Routes>
+        <Route path="/diagnosis" element={<PublicDiagnosisPage />} />
+        <Route
+          path="/*"
+          element={
+            loggedIn ? (
+              <SchemaProvider>
+                <Layout onLogout={handleLogout}>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/tree" element={<TreeView />} />
+                    <Route path="/nodes" element={<NodeList />} />
+                    <Route path="/nodes/:nodeId" element={<NodeEditor />} />
+                    <Route path="/finals" element={<FinalsList />} />
+                    <Route path="/finals/:finalId" element={<FinalEditor />} />
+                    <Route path="/sessions" element={<SessionsList />} />
+                    <Route path="/schemas" element={<SchemasList />} />
+                    <Route path="/users" element={<UsersList />} />
+                    <Route path="/audit" element={<AuditLog />} />
+                    <Route path="/playground" element={<Playground />} />
+                    <Route path="*" element={<Navigate to="/" />} />
+                  </Routes>
+                </Layout>
+              </SchemaProvider>
+            ) : (
+              <LoginPage onLogin={() => setLoggedIn(true)} />
+            )
+          }
+        />
+      </Routes>
     </BrowserRouter>
   )
 }
