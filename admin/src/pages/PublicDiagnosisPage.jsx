@@ -24,17 +24,17 @@ export default function PublicDiagnosisPage() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-[#005f9f] bg-[rgb(0_100_170)] text-white shadow-[0_16px_40px_rgba(0,100,170,0.22)]">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-6 sm:py-7">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-4 sm:px-6 sm:py-5">
+          <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-blue-50">
                 Публичный диагностический инструмент
               </div>
-              <h1 className="mt-3 flex items-center gap-3 text-2xl font-bold tracking-tight text-white sm:text-4xl">
+              <h1 className="mt-3 flex items-start gap-3 text-2xl font-bold tracking-tight text-white sm:items-center sm:text-4xl">
                 <img
                   src="/logo-w.png"
                   alt="МедЛогика"
-                  className="h-11 w-auto shrink-0 object-contain sm:h-12"
+                  className="h-20 w-auto shrink-0 object-contain sm:h-12"
                 />
                 <span>МедЛогика: эндоскопическая маршрутизация</span>
               </h1>
@@ -42,7 +42,7 @@ export default function PublicDiagnosisPage() {
             <button
               onClick={session.startSession}
               disabled={session.loading}
-              className="inline-flex items-center gap-2 rounded-2xl border border-emerald-300 bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_25px_rgba(16,185,129,0.28)] transition hover:bg-emerald-600 disabled:opacity-50"
+              className="mx-auto inline-flex items-center gap-2 rounded-2xl border border-emerald-300 bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_25px_rgba(16,185,129,0.28)] transition hover:bg-emerald-600 disabled:opacity-50 sm:mx-0"
             >
               <RefreshCcw size={16} />
               Начать заново
@@ -53,8 +53,7 @@ export default function PublicDiagnosisPage() {
             <div className="flex items-start gap-3">
               <ShieldAlert size={18} className="mt-0.5 shrink-0 text-amber-300" />
               <div>
-                Сервис помогает структурировать диагностику и маршрутизацию, но не заменяет
-                клиническое решение врача. Используйте результаты как вспомогательную опору.
+                Сервис помогает структурировать диагностику, но не заменяет клиническое решение врача.
               </div>
             </div>
           </div>
@@ -78,7 +77,7 @@ export default function PublicDiagnosisPage() {
               </div>
             </div>
 
-            <div className="min-h-[50vh] bg-white px-4 py-4 sm:px-6 sm:py-6">
+            <div className="min-h-[42vh] bg-white px-4 py-4 sm:px-6 sm:py-4 lg:min-h-[34vh]">
               <DiagnosticTranscript
                 transcript={session.transcript}
                 error={session.error}
