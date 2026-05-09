@@ -11,13 +11,13 @@ import {
 
 export function DiagnosticTranscript({ transcript, error, finalResult, scrollRef, compactNodeMeta = false }) {
   return (
-    <div ref={scrollRef} className="flex-1 overflow-auto space-y-3">
+    <div ref={scrollRef} className="flex-1 overflow-auto space-y-4">
       {transcript.map((msg, i) => (
         <TranscriptRow key={i} msg={msg} compactNodeMeta={compactNodeMeta} />
       ))}
 
       {error && (
-        <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+        <div className="flex items-start gap-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 shadow-sm">
           <AlertCircle size={16} className="mt-0.5 shrink-0" /> {error}
         </div>
       )}
@@ -48,12 +48,13 @@ export function DiagnosticAnswerControls({
   const hasUnknownOption = options.some(o => o.option_id === 'unknown')
   const spin = loading && <Loader2 size={12} className="animate-spin inline ml-1" />
   const baseBtn = mobileFriendly ? 'px-4 py-3 text-sm' : 'px-3 py-2 text-sm'
-  const unknownBtn = `${baseBtn} bg-red-50 border-2 border-red-300 text-red-700 hover:bg-red-100 rounded-lg font-medium disabled:opacity-50`
-  const subtleUnknownBtn = `${mobileFriendly ? 'px-4 py-3' : 'px-4 py-2'} bg-red-50 border-2 border-red-300 text-red-700 hover:bg-red-100 rounded-lg text-sm font-medium disabled:opacity-50`
+  const primaryBtn = `${baseBtn} rounded-2xl border border-blue-200 bg-white text-blue-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-md disabled:opacity-50`
+  const unknownBtn = `${baseBtn} rounded-2xl border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-red-100 hover:shadow-md disabled:opacity-50`
+  const subtleUnknownBtn = `${mobileFriendly ? 'px-4 py-3' : 'px-4 py-2'} rounded-2xl border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:-translate-y-0.5 hover:bg-red-100 hover:shadow-md text-sm font-medium disabled:opacity-50`
 
   if (type === 'single_choice' || type === 'yes_no') {
     return (
-      <div className={`flex flex-wrap gap-2 ${className}`}>
+      <div className={`flex flex-wrap gap-2.5 ${className}`}>
         {options.map(o => (
           <button
             key={o.option_id}
@@ -62,7 +63,7 @@ export function DiagnosticAnswerControls({
             className={
               o.option_id === 'unknown'
                 ? unknownBtn
-                : `${baseBtn} bg-white border-2 border-blue-500 text-blue-700 hover:bg-blue-50 rounded-lg font-medium disabled:opacity-50`
+                : `${primaryBtn} font-medium`
             }
           >
             {o.label}
@@ -85,7 +86,7 @@ export function DiagnosticAnswerControls({
   if (type === 'multi_choice') {
     return (
       <div className={className}>
-        <div className="flex flex-wrap gap-2 mb-3">
+        <div className="mb-3 flex flex-wrap gap-2.5">
           {options.map(o => {
             const active = multiSelected.has(o.option_id)
             return (
@@ -93,10 +94,10 @@ export function DiagnosticAnswerControls({
                 key={o.option_id}
                 disabled={loading}
                 onClick={() => onToggleMulti(o.option_id)}
-                className={`${baseBtn} border-2 rounded-lg font-medium transition ${
+                className={`${baseBtn} rounded-2xl border font-medium shadow-sm transition ${
                   active
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'bg-white text-blue-700 border-blue-500 hover:bg-blue-50'
+                    ? 'border-blue-600 bg-blue-600 text-white shadow-blue-200'
+                    : 'border-blue-200 bg-white text-blue-700 hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-md'
                 } disabled:opacity-50`}
               >
                 {active ? '☑' : '☐'} {o.label}
@@ -108,7 +109,7 @@ export function DiagnosticAnswerControls({
           <button
             disabled={loading}
             onClick={onMultiDone}
-            className={`${mobileFriendly ? 'px-4 py-3' : 'px-4 py-2'} bg-green-600 text-white hover:bg-green-700 rounded-lg text-sm font-semibold flex items-center gap-2 disabled:opacity-50`}
+            className={`${mobileFriendly ? 'px-4 py-3' : 'px-4 py-2'} flex items-center gap-2 rounded-2xl bg-gradient-to-r from-emerald-500 to-green-600 text-sm font-semibold text-white shadow-[0_10px_25px_rgba(34,197,94,0.25)] transition hover:-translate-y-0.5 hover:from-emerald-400 hover:to-green-500 disabled:opacity-50`}
           >
             Готово ({multiSelected.size}) <ChevronRight size={14} /> {spin}
           </button>
@@ -147,7 +148,7 @@ export function DiagnosticAnswerControls({
                     value={fieldInputs[field.id] || ''}
                     onChange={(e) => onFieldChange(field.id, e.target.value)}
                     placeholder={field.range ? `${field.range[0]} - ${field.range[1]}` : 'Введите значение'}
-                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
                   />
                 </label>
               ))}
@@ -156,7 +157,7 @@ export function DiagnosticAnswerControls({
               <button
                 disabled={loading || !Object.values(fieldInputs).some(v => String(v || '').trim())}
                 onClick={onNumericSubmit}
-                className={`${mobileFriendly ? 'px-4 py-3' : 'px-4 py-2'} bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm disabled:opacity-50`}
+                className={`${mobileFriendly ? 'px-4 py-3' : 'px-4 py-2'} rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-sm text-white shadow-[0_10px_25px_rgba(59,130,246,0.25)] transition hover:-translate-y-0.5 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50`}
               >
                 Отправить {spin}
               </button>
@@ -176,13 +177,13 @@ export function DiagnosticAnswerControls({
               value={fieldInputs.__raw || ''}
               onChange={(e) => onFieldChange('__raw', e.target.value)}
               placeholder="Hb=120 PLT=200"
-              className="flex-1 border rounded-lg px-3 py-2 text-sm font-mono"
+              className="flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-mono shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
               onKeyDown={(e) => { if (e.key === 'Enter') onNumericSubmit() }}
             />
             <button
               disabled={loading || !String(fieldInputs.__raw || '').trim()}
               onClick={onNumericSubmit}
-              className={`${mobileFriendly ? 'px-4 py-3' : 'px-4 py-2'} bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm disabled:opacity-50`}
+              className={`${mobileFriendly ? 'px-4 py-3' : 'px-4 py-2'} rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-sm text-white shadow-[0_10px_25px_rgba(59,130,246,0.25)] transition hover:-translate-y-0.5 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50`}
             >
               Отправить {spin}
             </button>
@@ -196,7 +197,7 @@ export function DiagnosticAnswerControls({
     <button
       disabled={loading}
       onClick={onNext}
-      className={`${mobileFriendly ? 'px-4 py-3' : 'px-4 py-2'} bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm flex items-center gap-2 disabled:opacity-50 ${className}`}
+      className={`${mobileFriendly ? 'px-4 py-3' : 'px-4 py-2'} flex items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 text-sm text-white shadow-[0_10px_25px_rgba(59,130,246,0.25)] transition hover:-translate-y-0.5 hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50 ${className}`}
     >
       <ChevronRight size={14} /> Далее {spin}
     </button>
@@ -255,10 +256,10 @@ function TranscriptRow({ msg, compactNodeMeta }) {
   if (msg.role === 'bot' && msg.kind === 'question') {
     return (
       <div className="flex gap-2 items-start">
-        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-          <BotIcon size={16} className="text-blue-600" />
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 shadow-sm">
+          <BotIcon size={16} className="text-blue-700" />
         </div>
-        <div className="bg-blue-50 border border-blue-100 rounded-xl rounded-tl-sm px-4 py-3 max-w-[80%]">
+        <div className="max-w-[84%] rounded-3xl rounded-tl-sm border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 px-4 py-3 shadow-sm">
           <div className={nodeMetaClass}>{msg.node.id}</div>
           <div className="text-sm whitespace-pre-wrap">{msg.node.text}</div>
           {msg.node.description && (
@@ -272,10 +273,10 @@ function TranscriptRow({ msg, compactNodeMeta }) {
   if (msg.role === 'bot' && msg.kind === 'answered') {
     return (
       <div className="flex gap-2 items-start">
-        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-          <BotIcon size={16} className="text-blue-600" />
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-100 to-indigo-100 shadow-sm">
+          <BotIcon size={16} className="text-blue-700" />
         </div>
-        <div className="bg-blue-50 border border-blue-100 rounded-xl rounded-tl-sm px-4 py-3 max-w-[80%]">
+        <div className="max-w-[84%] rounded-3xl rounded-tl-sm border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 px-4 py-3 shadow-sm">
           <div className={nodeMetaClass}>{msg.node.id}</div>
           <div className="text-sm whitespace-pre-wrap">{msg.node.text}</div>
           <div className="mt-2 pt-2 border-t border-blue-200 flex items-center gap-1 text-xs text-blue-800">
@@ -290,11 +291,11 @@ function TranscriptRow({ msg, compactNodeMeta }) {
   if (msg.role === 'user') {
     return (
       <div className="flex gap-2 items-start justify-end">
-        <div className="bg-gray-200 rounded-xl rounded-tr-sm px-4 py-2 max-w-[70%]">
+        <div className="max-w-[76%] rounded-3xl rounded-tr-sm bg-slate-100 px-4 py-2.5 text-slate-800 shadow-sm ring-1 ring-slate-200">
           <div className="text-sm">{msg.text}</div>
         </div>
-        <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center shrink-0">
-          <User size={16} className="text-gray-700" />
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-slate-200 shadow-sm">
+          <User size={16} className="text-slate-700" />
         </div>
       </div>
     )
@@ -309,7 +310,7 @@ function FinalCard({ result, compactNodeMeta }) {
   if (result.type === 'final') {
     const f = result.payload
     return (
-      <div className="bg-green-50 border-2 border-green-300 rounded-xl p-4">
+      <div className="rounded-3xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-5 shadow-sm">
         <h3 className="text-lg font-bold text-green-900 mb-2">
           Диагноз: {f.diagnosis}
         </h3>
@@ -325,7 +326,7 @@ function FinalCard({ result, compactNodeMeta }) {
 
   if (result.type === 'pending') {
     return (
-      <div className="bg-yellow-50 border-2 border-yellow-300 rounded-xl p-4">
+      <div className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm">
         <h3 className="text-lg font-bold text-yellow-900 mb-2">
           Требуется дообследование
         </h3>
@@ -344,7 +345,7 @@ function FinalCard({ result, compactNodeMeta }) {
 
   if (result.type === 'terminal') {
     return (
-      <div className="bg-blue-50 border-2 border-blue-300 rounded-xl p-4">
+      <div className="rounded-3xl border border-blue-200 bg-gradient-to-br from-blue-50 to-white p-5 shadow-sm">
         <h3 className="text-lg font-bold text-blue-900 mb-2">Итог</h3>
         <div className="text-sm">
           <span className={nodeMetaClass}>{result.node.id}</span>{compactNodeMeta ? null : ' — '} {result.node.text}
@@ -355,7 +356,7 @@ function FinalCard({ result, compactNodeMeta }) {
   }
 
   return (
-    <div className="bg-gray-50 border-2 border-gray-300 rounded-xl p-4">
+    <div className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-5 shadow-sm">
       <h3 className="text-lg font-bold">Диагностика завершена</h3>
       <Flags flags={result.flags} />
     </div>
