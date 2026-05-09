@@ -18,6 +18,16 @@ export function useDiagnosticSession({
   const [collectedData, setCollectedData] = useState({})
   const [unknownFlags, setUnknownFlags] = useState([])
   const scrollRef = useRef(null)
+  const startSessionApiRef = useRef(startSessionApi)
+  const submitAnswerApiRef = useRef(submitAnswerApi)
+
+  useEffect(() => {
+    startSessionApiRef.current = startSessionApi
+  }, [startSessionApi])
+
+  useEffect(() => {
+    submitAnswerApiRef.current = submitAnswerApi
+  }, [submitAnswerApi])
 
   const addQuestionToTranscript = useCallback((node) => {
     setTranscript(t => [...t, { role: 'bot', kind: 'question', node }])
@@ -34,7 +44,7 @@ export function useDiagnosticSession({
     setFieldInputs({})
     try {
       const userId = `${userIdPrefix}-${Date.now()}`
-      const data = await startSessionApi(userId, { schemaId })
+      const data = await startSessionApiRef.current(userId, { schemaId })
       setSessionId(data.session_id)
       if (data.current_node) {
         setCurrentNode(data.current_node)
@@ -49,7 +59,7 @@ export function useDiagnosticSession({
     } finally {
       setLoading(false)
     }
-  }, [addQuestionToTranscript, schemaId, startSessionApi, userIdPrefix])
+  }, [addQuestionToTranscript, schemaId, userIdPrefix])
 
   useEffect(() => {
     if (autoStart) {
@@ -78,7 +88,7 @@ export function useDiagnosticSession({
     })
 
     try {
-      const data = await submitAnswerApi(sessionId, currentNode.id, answer, { schemaId })
+      const data = await submitAnswerApiRef.current(sessionId, currentNode.id, answer, { schemaId })
       setCollectedData(data.collected_data || {})
       setUnknownFlags(data.unknown_flags || [])
       setMultiSelected(new Set())
@@ -118,7 +128,7 @@ export function useDiagnosticSession({
     } finally {
       setLoading(false)
     }
-  }, [addQuestionToTranscript, currentNode, schemaId, sessionId, submitAnswerApi])
+  }, [addQuestionToTranscript, currentNode, schemaId, sessionId])
 
   const handleChoice = useCallback((option) => {
     submitAnswer(option.option_id, option.label)
