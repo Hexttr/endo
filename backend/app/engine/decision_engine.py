@@ -158,6 +158,16 @@ class DecisionEngine:
                 next_node_id = self._find_option_next(node, "unknown")
                 if not next_node_id and node.unknown_action:
                     next_node_id = self._resolve_unknown(node, collected)
+                # For routing-rules checklists (e.g. A010), an explicit
+                # "Данные отсутствуют" action should still follow the same
+                # deterministic empty-selection path instead of falling through
+                # to the first DB edge.
+                if (
+                    not next_node_id
+                    and node.extra
+                    and node.extra.get("routing_rules")
+                ):
+                    next_node_id = self._resolve_multi_choice(node, [], collected)
             else:
                 selected = answer if isinstance(answer, list) else []
                 next_node_id = self._resolve_multi_choice(node, selected, collected)
@@ -360,6 +370,7 @@ class DecisionEngine:
     def _evaluate_b077(self, rules: list, all_selected: set, collected: dict) -> str:
         s = all_selected
         ppi_long = "yes" in str(collected.get("B046", ""))
+        family_pancreas = "family_pancreas" in s or "family_oncology_pancreas" in s
 
         for rule in rules:
             rid = rule.get("id", "")
@@ -376,7 +387,7 @@ class DecisionEngine:
 
             elif rid == "peutz_jeghers":
                 if ("pigment_lips" in s and "BASE_2" in s
-                        and "LOC_1" in s and "family_pancreas" in s):
+                        and "LOC_1" in s and family_pancreas):
                     return self._fid(rule["next"])
 
             elif rid == "sap":
@@ -410,8 +421,6 @@ class DecisionEngine:
         return self._fid("F07")
 
     def _evaluate_c040(self, rules: list, all_selected: set, collected: dict) -> str:
-        s = all_selected
-
         c010 = collected.get("C010", [])
         if isinstance(c010, str):
             c010 = [c010]
@@ -431,6 +440,13 @@ class DecisionEngine:
                     hb = float(hb)
                 except (ValueError, TypeError):
                     hb = None
+
+        family_crc = "family_crr" in c015 or "family_oncology_colorectal" in c015
+        family_polyposis = "family_polyposis" in c015
+        epigastric_pain = "epigastric_pain" in c010
+        retrosternal_pain = "retrosternal_pain" in c010
+        positional_relation = "pain_related_to_position" in c010
+        meal_relation = "pain_related_to_food" in c010
 
         for rule in sorted(rules, key=lambda r: r.get("priority", 999)):
             rid = rule.get("id", "")
@@ -473,29 +489,25 @@ class DecisionEngine:
 
             elif rid == "C_R4":
                 pigment = "pigment" in c010
-                family_poly = "family_polyposis" in c015 or "family_crr" in c015
                 stool_blood = "stool" in c010
-                if pigment or (stool_blood and family_poly):
+                if pigment or (stool_blood and (family_polyposis or family_crc)):
                     return self._fid(rule["next"])
 
             elif rid == "C_R5":
                 heartburn = "heartburn" in c010
-                pain = "pain" in c010
-                if heartburn and pain:
+                if heartburn and retrosternal_pain and positional_relation:
                     return self._fid(rule["next"])
 
             elif rid == "C_R6":
-                pain = "pain" in c010
                 hp_yes = "h_pylori_yes" in c015
                 nsaids_yes = "nsaids_yes" in c015
-                if pain and (hp_yes or nsaids_yes):
+                if epigastric_pain and meal_relation and (hp_yes or nsaids_yes):
                     return self._fid(rule["next"])
 
             elif rid == "C_R7":
                 nsaids_yes = "nsaids_yes" in c015
-                pain = "pain" in c010
                 no_blood = "vomiting" not in c010 and "stool" not in c010
-                if nsaids_yes and pain and no_blood:
+                if nsaids_yes and (epigastric_pain or "pain" in c010) and no_blood:
                     return self._fid(rule["next"])
 
             elif rid == "C_R8":

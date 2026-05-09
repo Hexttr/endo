@@ -92,3 +92,25 @@ async def test_validate_conflicting_multi_choice_group(client: AsyncClient, db: 
     r = await client.get(f"/api/schemas/{sid}/validate")
     body = r.json()
     assert any(i["code"] == "multi_choice_conflict_group" for i in body["issues"])
+
+
+@pytest.mark.asyncio
+async def test_validate_multi_choice_skip_flag_with_routing_rules_warns(client: AsyncClient, db: AsyncSession):
+    sid = "routingwarn"
+    db.add(Schema(id=sid, name="Routing warn", root_node_id=f"{sid}::N1"))
+    db.add(Section(id=f"{sid}::overview", schema_id=sid, slug="overview", label="Overview", order=0))
+    db.add(Node(
+        id=f"{sid}::N1",
+        schema_id=sid,
+        section="overview",
+        text="Checklist",
+        input_type="multi_choice",
+        unknown_action="skip_with_flag",
+        extra={"routing_rules": [{"condition": "count_all() == 0", "next": f"{sid}::N2"}]},
+    ))
+    db.add(Node(id=f"{sid}::N2", schema_id=sid, section="overview", text="Done", input_type="info", is_terminal=True))
+    await db.commit()
+
+    r = await client.get(f"/api/schemas/{sid}/validate")
+    body = r.json()
+    assert any(i["code"] == "multi_skip_unknown_ambiguous" for i in body["issues"])

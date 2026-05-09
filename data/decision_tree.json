@@ -489,10 +489,10 @@
         {"id": "vrvp", "label": "ВРВП", "next": "B080"},
         {"id": "gastric_ulcer", "label": "ЯБ желудка", "next": "B090"},
         {"id": "duodenal_ulcer", "label": "ЯБ ДПК", "next": "B091"},
-        {"id": "erosive_gastritis", "label": "Эрозивный гастрит", "next": "B100"},
+        {"id": "erosive_gastritis", "label": "Эрозивный гастрит", "next": "B065"},
         {"id": "nsaids_gastropathy", "label": "НПВС-гастропатия", "next": "F12"},
         {"id": "stress_erosions", "label": "Стресс-эрозии", "next": "F13a"},
-        {"id": "reflux_esophagitis", "label": "Рефлюкс-эзофагит", "next": "B110"},
+        {"id": "reflux_esophagitis", "label": "Рефлюкс-эзофагит", "next": "B065"},
         {"id": "chemical_burn", "label": "Хим. ожог", "next": "B120"}
       ]
     },
@@ -799,7 +799,7 @@
     "B052_family": {
       "id": "B052_family",
       "section": "branch_b_history",
-      "text": "Семейный анамнез (выберите все известные случаи; если анамнез отрицательный, можно нажать «Готово» без выбора)",
+      "text": "Семейный анамнез (выберите все известные случаи; если случаев не было, нажмите «Готово» без выбора; если анамнез неизвестен, используйте кнопку «Данные отсутствуют»)",
       "input_type": "multi_choice",
       "unknown_action": "skip_with_flag",
       "options": [
@@ -807,7 +807,8 @@
         {"id": "family_pancreas", "label": "Рак поджелудочной / молочной железы / яичников"},
         {"id": "family_duodenal_cancer", "label": "Рак двенадцатиперстной кишки"},
         {"id": "family_small_bowel_cancer", "label": "Рак тонкой кишки"},
-        {"id": "family_polyposis", "label": "Полипоз кишечника"}
+        {"id": "family_polyposis", "label": "Полипоз кишечника"},
+        {"id": "family_other_gi_cancer", "label": "Другая подтверждённая онкология ЖКТ"}
       ]
     },
     "B060": {
@@ -1297,14 +1298,18 @@
     "C010": {
       "id": "C010",
       "section": "branch_c",
-      "text": "Жалобы",
+      "text": "Жалобы (отмечайте только подтверждённые симптомы)",
       "input_type": "multi_choice",
       "unknown_action": "skip_with_flag",
       "options": [
         {"id": "pain", "label": "Боль?"},
-        {"id": "vomiting", "label": "Рвота?"},
+        {"id": "epigastric_pain", "label": "Боль в эпигастрии?"},
+        {"id": "retrosternal_pain", "label": "Загрудинная боль?"},
+        {"id": "pain_related_to_food", "label": "Боль связана с приёмом пищи?"},
+        {"id": "pain_related_to_position", "label": "Жалобы усиливаются в положении лёжа / при наклоне?"},
+        {"id": "vomiting", "label": "Рвота с кровью / «кофейной гущей»?"},
         {"id": "heartburn", "label": "Изжога?"},
-        {"id": "stool", "label": "Изменения стула?"},
+        {"id": "stool", "label": "Мелена / кровь в стуле?"},
         {"id": "ascites", "label": "Асцит?"},
         {"id": "jaundice", "label": "Желтуха?"},
         {"id": "pigment", "label": "Пигментные пятна?"},
@@ -1315,7 +1320,7 @@
     "C015": {
       "id": "C015",
       "section": "branch_c",
-      "text": "Дополнительный анамнез (выберите все подтверждённые факты)",
+      "text": "Дополнительный анамнез (выберите все подтверждённые факты; если информации нет, используйте кнопку «Данные отсутствуют»)",
       "input_type": "multi_choice",
       "unknown_action": "skip_with_flag",
       "options": [
@@ -1326,11 +1331,10 @@
         {"id": "chemical_ingestion", "label": "Приём химического вещества / едкого агента"},
         {"id": "family_crr", "label": "Семейный анамнез: колоректальный рак"},
         {"id": "family_polyposis", "label": "Семейный анамнез: полипоз"},
-        {"id": "family_oncology_colorectal", "label": "Семейный анамнез: колоректальный рак / аденокарцинома"},
-        {"id": "family_oncology_pancreas", "label": "Семейный анамнез: рак поджелудочной / молочной железы / яичников"},
-        {"id": "family_oncology_duodenum", "label": "Семейный анамнез: рак двенадцатиперстной кишки"},
-        {"id": "family_oncology_small_bowel", "label": "Семейный анамнез: рак тонкой кишки"},
-        {"id": "family_oncology_other", "label": "Семейный анамнез: другая онкология ЖКТ"}
+        {"id": "family_pancreas", "label": "Семейный анамнез: рак поджелудочной / молочной железы / яичников"},
+        {"id": "family_duodenal_cancer", "label": "Семейный анамнез: рак двенадцатиперстной кишки"},
+        {"id": "family_small_bowel_cancer", "label": "Семейный анамнез: рак тонкой кишки"},
+        {"id": "family_other_gi_cancer", "label": "Семейный анамнез: другая подтверждённая онкология ЖКТ"}
       ]
     },
     "C020": {
@@ -1375,10 +1379,10 @@
         {"id": "C_R1", "label": "ЭКСТРЕННЫЙ: рвота кровью / мелена / шок / Hb<80", "priority": 1, "next": "A001"},
         {"id": "C_R3", "label": "ЭКСТРЕННЫЙ: дисфагия + приём хим. вещества", "priority": 2, "next": "A006"},
         {"id": "C_R2", "label": "ВЫСОКИЙ: асцит + желтуха + тромбоцитопения (≥2)", "priority": 3, "next": "B080"},
-        {"id": "C_R4", "label": "СРЕДНИЙ: пигм. пятна на губах ИЛИ прожилки крови + семейный полипоз", "priority": 4, "next": "B070"},
+        {"id": "C_R4", "label": "СРЕДНИЙ: пигм. пятна на губах ИЛИ прожилки крови + семейный полипоз / КРР", "priority": 4, "next": "B070"},
         {"id": "C_R5", "label": "СРЕДНИЙ: изжога + загрудинная боль + связь с положением", "priority": 5, "next": "B110"},
         {"id": "C_R6", "label": "СРЕДНИЙ: эпигастр. боль + связь с едой + H.pylori/НПВС", "priority": 6, "next": "B090"},
-        {"id": "C_R7", "label": "СРЕДНИЙ: приём НПВС + боль, нет кровотечения", "priority": 7, "next": "B100"},
+        {"id": "C_R7", "label": "СРЕДНИЙ: приём НПВС + боль, нет кровотечения", "priority": 7, "next": "F12"},
         {"id": "C_R8", "label": "НИЗКИЙ: ни одно правило не сработало → дообследование", "priority": 8, "next": "AWAITING_WORKUP"}
       ],
       "data_transfer": {

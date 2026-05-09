@@ -129,3 +129,76 @@ async def test_safe_default_unknown_without_safe_option_does_not_pick_last_optio
     assert res.get("next_node_id") is None
     assert res.get("status") == "active"
     assert session.unknown_flags == [{"node": "S1", "reason": "user_unknown"}]
+
+
+@pytest.mark.asyncio
+async def test_multi_choice_unknown_with_routing_rules_uses_deterministic_empty_path(db: AsyncSession):
+    sid = "multi-routing"
+    db.add(Schema(id=sid, name="Multi routing", root_node_id=f"{sid}::M1"))
+    db.add(Section(id=f"{sid}::overview", schema_id=sid, slug="overview", label="Overview", order=0))
+    db.add(Node(
+        id=f"{sid}::M1",
+        schema_id=sid,
+        section="overview",
+        text="Risk factors",
+        input_type="multi_choice",
+        unknown_action="skip_with_flag",
+        extra={
+            "routing_rules": [
+                {"condition": "any_from_group('risk')", "next": f"{sid}::HI"},
+                {"condition": "count_all() == 0", "next": f"{sid}::LO"},
+            ]
+        },
+    ))
+    db.add(Node(id=f"{sid}::HI", schema_id=sid, section="overview",
+                text="High", input_type="info", is_terminal=True))
+    db.add(Node(id=f"{sid}::LO", schema_id=sid, section="overview",
+                text="Low", input_type="info", is_terminal=True))
+    await db.flush()
+    db.add(Option(node_id=f"{sid}::M1", schema_id=sid, option_id="portal", label="Portal", extra={"group": "risk"}))
+    db.add(Edge(from_node_id=f"{sid}::M1", schema_id=sid, to_node_id=f"{sid}::HI", label="unsafe-first", priority=0))
+    db.add(Edge(from_node_id=f"{sid}::M1", schema_id=sid, to_node_id=f"{sid}::LO", label="safe-second", priority=1))
+    await db.commit()
+
+    engine = DecisionEngine(db, schema_id=sid)
+    session = await engine.start_session(user_id="u1")
+    res = await engine.process_answer(session, "M1", "unknown")
+
+    assert res.get("next_node_id") == "LO"
+    assert session.unknown_flags == [{"node": "M1", "reason": "user_unknown"}]
+
+
+@pytest.mark.asyncio
+async def test_c040_epigastric_nsaids_without_bleeding_routes_to_nsaid_final(db: AsyncSession):
+    sid = "c040"
+    db.add(Schema(id=sid, name="C040", root_node_id=f"{sid}::C040"))
+    db.add(Section(id=f"{sid}::branch_c", schema_id=sid, slug="branch_c", label="Branch C", order=0))
+    db.add(Node(
+        id=f"{sid}::C040",
+        schema_id=sid,
+        section="branch_c",
+        text="Auto",
+        input_type="auto",
+        extra={
+            "rules": [
+                {"id": "C_R7", "priority": 1, "next": f"{sid}::F12"},
+                {"id": "C_R8", "priority": 99, "next": f"{sid}::F99"},
+            ]
+        },
+    ))
+    db.add(Final(id=f"{sid}::F12", schema_id=sid, diagnosis="NSAID"))
+    db.add(Final(id=f"{sid}::F99", schema_id=sid, diagnosis="Fallback"))
+    await db.commit()
+
+    engine = DecisionEngine(db, schema_id=sid)
+    session = await engine.start_session(user_id="u1")
+    session.collected_data = {
+        "C010": ["epigastric_pain"],
+        "C015": ["nsaids_yes"],
+        "C020": [],
+        "C030": {},
+    }
+    res = await engine.process_answer(session, "C040", "next")
+
+    assert res.get("final_id") == "F12"
+    assert res.get("status") == "completed"

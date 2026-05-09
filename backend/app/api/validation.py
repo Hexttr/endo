@@ -189,6 +189,19 @@ async def validate_schema(schema_id: str, db: AsyncSession = Depends(get_db)) ->
                 hint="Добавьте кнопку 'Данные отсутствуют' с next или fallback-edge.",
             ))
 
+        if (
+            n.input_type == "multi_choice"
+            and n.unknown_action == "skip_with_flag"
+            and extra.get("routing_rules")
+            and not explicit_unknown
+        ):
+            issues.append(_issue(
+                "warning", "multi_skip_unknown_ambiguous",
+                f"Узел '{short}' использует routing_rules и skip_with_flag без явного unknown-маршрута.",
+                entity_type="node", entity_id=short,
+                hint="Добавьте explicit unknown option или убедитесь, что движок детерминированно обрабатывает 'Данные отсутствуют'.",
+            ))
+
         # 3g. Numeric steps without declared fields are opaque to clinicians.
         if n.input_type == "numeric" and not extra.get("fields"):
             issues.append(_issue(
