@@ -293,7 +293,11 @@ async def clone_schema(
     cl_rows = (await db.execute(select(Classification).where(Classification.schema_id == schema_id))).scalars().all()
     for c in cl_rows:
         db.add(Classification(
-            id=c.id,
+            # Classification.id is globally unique in the current schema, unlike
+            # nodes/finals where IDs are already prefixed. On clone we must
+            # remap it ourselves or the second schema will hit PK collisions on
+            # well-known ids such as "forrest" / "child_pugh".
+            id=f"{body.new_id}::{c.id}",
             schema_id=body.new_id,
             name=c.name,
             data=c.data,

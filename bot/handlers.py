@@ -148,7 +148,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     # Build the answer payload for the API + a human-readable label for the archive
     if callback_data == "multi_done":
         selected_ids = list(context.user_data.get("multi_selected", set()))
-        answer = selected_ids if selected_ids else "unknown"
+        answer = selected_ids
         display_label = _multi_display(node, selected_ids)
     else:
         answer = callback_data
@@ -173,13 +173,15 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     text = update.message.text.strip()
     try:
         values = {}
-        for part in text.replace(",", " ").split():
-            if "=" in part:
-                k, v = part.split("=", 1)
-                values[k.strip()] = float(v.strip())
+        normalized = text.replace(";", " ").replace("\n", " ")
+        for part in normalized.split():
+            token = part.replace(":", "=", 1) if ":" in part and "=" not in part else part
+            if "=" in token:
+                k, v = token.split("=", 1)
+                values[k.strip()] = float(v.strip().replace(",", "."))
             else:
                 try:
-                    float(part)
+                    float(token.replace(",", "."))
                 except ValueError:
                     pass
         answer = values if values else text
@@ -273,18 +275,28 @@ async def _present_node_as_new_message(message, context, node: dict) -> int:
         context.user_data["multi_selected"] = set()
         kb = build_multi_choice_keyboard(node.get("options", []), set())
         sent = await message.reply_text(
-            text + "\n\n<i>Выберите все подходящие варианты и нажмите «Готово».</i>",
+            text + "\n\n<i>Выберите все подходящие варианты и нажмите «Готово». "
+            "Если подходящих факторов нет, можно нажать «Готово» без выбора. "
+            "Если данных совсем нет, используйте кнопку «Данные отсутствуют».</i>",
             reply_markup=kb,
             parse_mode="HTML",
         )
     elif input_type == "numeric":
         fields_desc = ""
+        sample_parts = []
         if node.get("extra") and node["extra"].get("fields"):
             for f in node["extra"]["fields"]:
-                fields_desc += f"\n  • {_h(f['label'])}"
+                unit = f" ({_h(f['unit'])})" if f.get("unit") else ""
+                fields_desc += f"\n  • <code>{_h(f['id'])}</code> — {_h(f['label'])}{unit}"
+                if len(sample_parts) < 3:
+                    sample_parts.append(f"{f['id']}=...")
         kb = build_numeric_keyboard()
+        sample = "\n".join(sample_parts) if sample_parts else "hb=120\nplt=200\ninr=1.2"
         sent = await message.reply_text(
-            text + f"\n\nВведите значения в формате: <code>Hb=120 PLT=200</code>{fields_desc}",
+            text + (
+                "\n\nВведите показатели по одному в строке в формате:\n"
+                f"<code>{_h(sample)}</code>{fields_desc}"
+            ),
             reply_markup=kb,
             parse_mode="HTML",
         )
@@ -347,7 +359,7 @@ def _find_option_label(node: dict, option_id: str) -> str:
 
 def _multi_display(node: dict, selected_ids: list) -> str:
     if not selected_ids:
-        return "❓ Ничего не выбрано"
+        return "— Ничего не отмечено"
     labels = []
     for opt in node.get("options", []) or []:
         if opt.get("option_id") in selected_ids:

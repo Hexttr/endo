@@ -149,17 +149,17 @@ class DecisionEngine:
                 next_node_id = self._find_option_next(node, answer)
 
         elif node.input_type == "multi_choice":
-            selected = answer if isinstance(answer, list) else []
-            if not selected or answer == "unknown":
+            if answer == "unknown":
                 flags.append({"node": short_node_id, "reason": "user_unknown"})
-                # Same preference as single_choice: if the admin wired an
-                # explicit `option_id='unknown'` route, use it before trying
-                # routing_rules / priority / edges.
-                explicit = self._find_option_next(node, "unknown")
-                if explicit:
-                    next_node_id = explicit
-
-            if not next_node_id:
+                # Keep "nothing selected" separate from "data absent": an empty
+                # multi-select can be a meaningful clinical answer ("risk factors
+                # not found"), while explicit unknown should follow the node's
+                # dedicated fallback path.
+                next_node_id = self._find_option_next(node, "unknown")
+                if not next_node_id and node.unknown_action:
+                    next_node_id = self._resolve_unknown(node, collected)
+            else:
+                selected = answer if isinstance(answer, list) else []
                 next_node_id = self._resolve_multi_choice(node, selected, collected)
             if not next_node_id:
                 next_node_id = await self._resolve_next_from_edges(node.id)
@@ -242,10 +242,8 @@ class DecisionEngine:
         action = node.unknown_action
         if action == "safe_default":
             for opt in node.options:
-                if opt.option_id in ("no", "unknown"):
+                if opt.option_id in ("no", "none", "unknown", "no_data"):
                     return opt.next_node_id
-            if node.options:
-                return node.options[-1].next_node_id
         elif action == "branch_c":
             return self._fid("C001")
         elif action == "skip_with_flag":
@@ -447,7 +445,12 @@ class DecisionEngine:
 
             elif rid == "C_R3":
                 dysphagia = "dysphagia" in c010
-                if dysphagia and "chemical" in str(collected):
+                chemical = (
+                    "chemical_ingestion" in c015
+                    or "chemical" in all_selected
+                    or "chemical" in str(collected)
+                )
+                if dysphagia and chemical:
                     return self._fid(rule["next"])
 
             elif rid == "C_R2":

@@ -19,7 +19,7 @@ export default function Playground() {
   const [sessionId, setSessionId] = useState(null)
   const [currentNode, setCurrentNode] = useState(null)
   const [transcript, setTranscript] = useState([])  // {role, node, text, choices?}
-  const [numericInput, setNumericInput] = useState('')
+  const [fieldInputs, setFieldInputs] = useState({})
   const [multiSelected, setMultiSelected] = useState(new Set())
   const [finalResult, setFinalResult] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -40,7 +40,7 @@ export default function Playground() {
     setCollectedData({})
     setUnknownFlags([])
     setMultiSelected(new Set())
-    setNumericInput('')
+    setFieldInputs({})
     try {
       // Unique per session so the backend doesn't merge with stale sessions.
       const data = await startPlaygroundSession(`playground-${Date.now()}`)
@@ -87,7 +87,7 @@ export default function Playground() {
       setCollectedData(data.collected_data || {})
       setUnknownFlags(data.unknown_flags || [])
       setMultiSelected(new Set())
-      setNumericInput('')
+      setFieldInputs({})
 
       if (data.final) {
         setFinalResult({ type: 'final', payload: data.final, flags: data.unknown_flags || [] })
@@ -137,13 +137,17 @@ export default function Playground() {
   function handleMultiDone() {
     const selected = Array.from(multiSelected)
     if (selected.length === 0) {
-      submitAnswer('unknown', 'Ничего не выбрано')
+      submitAnswer([], 'Ничего не отмечено')
       return
     }
     const labels = currentNode.options
       .filter(o => selected.includes(o.option_id))
       .map(o => o.label)
     submitAnswer(selected, labels.join(' + '))
+  }
+
+  function handleMultiUnknown() {
+    submitAnswer('unknown', 'Данные отсутствуют')
   }
 
   function toggleMulti(optionId) {
@@ -155,19 +159,43 @@ export default function Playground() {
     })
   }
 
+  function handleFieldChange(fieldId, value) {
+    setFieldInputs(prev => ({ ...prev, [fieldId]: value }))
+  }
+
   function handleNumericSubmit() {
-    const val = numericInput.trim()
-    if (!val) return
+    if (!currentNode) return
+    const fields = currentNode.extra?.fields || []
+
+    if (fields.length === 0) {
+      const raw = (fieldInputs.__raw || '').trim()
+      if (!raw) return
+      const values = {}
+      raw.split(/\s+/).forEach(pair => {
+        if (pair.includes('=')) {
+          const [k, v] = pair.split('=')
+          const num = parseFloat(v.replace(',', '.'))
+          if (!Number.isNaN(num)) values[k.trim()] = num
+        }
+      })
+      submitAnswer(Object.keys(values).length > 0 ? values : raw, raw)
+      return
+    }
+
     const values = {}
-    val.replace(',', ' ').split(/\s+/).forEach(pair => {
-      if (pair.includes('=')) {
-        const [k, v] = pair.split('=')
-        const num = parseFloat(v)
-        if (!Number.isNaN(num)) values[k.trim()] = num
+    const labels = []
+    fields.forEach(field => {
+      const raw = (fieldInputs[field.id] || '').trim()
+      if (!raw) return
+      const num = parseFloat(raw.replace(',', '.'))
+      if (!Number.isNaN(num)) {
+        values[field.id] = num
+        labels.push(`${field.label}: ${raw}`)
       }
     })
-    const answer = Object.keys(values).length > 0 ? values : val
-    submitAnswer(answer, val)
+
+    if (Object.keys(values).length === 0) return
+    submitAnswer(values, labels.join('; '))
   }
 
   return (
@@ -214,10 +242,11 @@ export default function Playground() {
               onUnknown={handleUnknown}
               onNext={handleNext}
               onMultiDone={handleMultiDone}
+              onMultiUnknown={handleMultiUnknown}
               onToggleMulti={toggleMulti}
               multiSelected={multiSelected}
-              numericInput={numericInput}
-              onNumericChange={setNumericInput}
+              fieldInputs={fieldInputs}
+              onFieldChange={handleFieldChange}
               onNumericSubmit={handleNumericSubmit}
             />
           </div>
@@ -317,8 +346,8 @@ function TranscriptRow({ msg }) {
 }
 
 function AnswerControls({
-  node, loading, onChoice, onUnknown, onNext, onMultiDone, onToggleMulti,
-  multiSelected, numericInput, onNumericChange, onNumericSubmit,
+  node, loading, onChoice, onUnknown, onNext, onMultiDone, onMultiUnknown, onToggleMulti,
+  multiSelected, fieldInputs, onFieldChange, onNumericSubmit,
 }) {
   const type = node.input_type || 'info'
   const options = node.options || []
@@ -380,6 +409,13 @@ function AnswerControls({
         >
           Готово ({multiSelected.size}) <ChevronRight size={14} /> {spin}
         </button>
+        <button
+          disabled={loading}
+          onClick={onMultiUnknown}
+          className="ml-2 px-4 py-2 bg-white border border-dashed border-gray-400 text-gray-600 hover:bg-gray-100 rounded-lg text-sm disabled:opacity-50"
+        >
+          Данные отсутствуют
+        </button>
       </div>
     )
   }
@@ -388,28 +424,66 @@ function AnswerControls({
     const fields = node.extra?.fields || []
     return (
       <div>
-        {fields.length > 0 && (
-          <div className="mb-2 text-xs text-gray-600">
-            Поля: {fields.map(f => f.label).join(', ')}
+        {fields.length > 0 ? (
+          <>
+            <div className="mb-3 text-xs text-gray-600">
+              Каждый показатель вводится в отдельной строке. Если какого-то значения нет, оставьте поле пустым.
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {fields.map(field => (
+                <label key={field.id} className="block">
+                  <div className="text-xs font-medium text-gray-700 mb-1">
+                    {field.label}
+                    {field.unit ? `, ${field.unit}` : ''}
+                  </div>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    value={fieldInputs[field.id] || ''}
+                    onChange={(e) => onFieldChange(field.id, e.target.value)}
+                    placeholder={field.range ? `${field.range[0]} - ${field.range[1]}` : 'Введите значение'}
+                    className="w-full border rounded-lg px-3 py-2 text-sm"
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                disabled={loading || !Object.values(fieldInputs).some(v => String(v || '').trim())}
+                onClick={onNumericSubmit}
+                className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm disabled:opacity-50"
+              >
+                Отправить {spin}
+              </button>
+              <button
+                disabled={loading}
+                onClick={onUnknown}
+                className="px-4 py-2 bg-white border border-dashed border-gray-400 text-gray-600 hover:bg-gray-100 rounded-lg text-sm disabled:opacity-50"
+              >
+                Нет данных
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={fieldInputs.__raw || ''}
+              onChange={(e) => onFieldChange('__raw', e.target.value)}
+              placeholder="Hb=120 PLT=200"
+              className="flex-1 border rounded-lg px-3 py-2 text-sm font-mono"
+              onKeyDown={(e) => { if (e.key === 'Enter') onNumericSubmit() }}
+            />
+            <button
+              disabled={loading || !String(fieldInputs.__raw || '').trim()}
+              onClick={onNumericSubmit}
+              className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm disabled:opacity-50"
+            >
+              Отправить {spin}
+            </button>
           </div>
         )}
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={numericInput}
-            onChange={(e) => onNumericChange(e.target.value)}
-            placeholder="Hb=120 PLT=200"
-            className="flex-1 border rounded-lg px-3 py-2 text-sm font-mono"
-            onKeyDown={(e) => { if (e.key === 'Enter') onNumericSubmit() }}
-          />
-          <button
-            disabled={loading || !numericInput.trim()}
-            onClick={onNumericSubmit}
-            className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm disabled:opacity-50"
-          >
-            Отправить {spin}
-          </button>
-        </div>
       </div>
     )
   }

@@ -58,3 +58,37 @@ async def test_validate_unreachable_node(client: AsyncClient, db: AsyncSession, 
 async def test_validate_404_on_missing_schema(client: AsyncClient):
     r = await client.get("/api/schemas/does-not-exist/validate")
     assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_validate_skip_flag_without_route(client: AsyncClient, db: AsyncSession):
+    sid = "skipflag"
+    db.add(Schema(id=sid, name="Skip flag", root_node_id=f"{sid}::N1"))
+    db.add(Section(id=f"{sid}::overview", schema_id=sid, slug="overview", label="Overview", order=0))
+    db.add(Node(id=f"{sid}::N1", schema_id=sid, section="overview",
+                text="Question", input_type="single_choice", unknown_action="skip_with_flag"))
+    await db.flush()
+    db.add(Option(node_id=f"{sid}::N1", schema_id=sid, option_id="yes", label="Yes",
+                  next_node_id=None))
+    await db.commit()
+
+    r = await client.get(f"/api/schemas/{sid}/validate")
+    body = r.json()
+    assert any(i["code"] == "skip_flag_without_route" for i in body["issues"])
+
+
+@pytest.mark.asyncio
+async def test_validate_conflicting_multi_choice_group(client: AsyncClient, db: AsyncSession):
+    sid = "conflict"
+    db.add(Schema(id=sid, name="Conflict", root_node_id=f"{sid}::N1"))
+    db.add(Section(id=f"{sid}::overview", schema_id=sid, slug="overview", label="Overview", order=0))
+    db.add(Node(id=f"{sid}::N1", schema_id=sid, section="overview",
+                text="History", input_type="multi_choice"))
+    await db.flush()
+    db.add(Option(node_id=f"{sid}::N1", schema_id=sid, option_id="hp_yes", label="HP yes"))
+    db.add(Option(node_id=f"{sid}::N1", schema_id=sid, option_id="hp_no", label="HP no"))
+    await db.commit()
+
+    r = await client.get(f"/api/schemas/{sid}/validate")
+    body = r.json()
+    assert any(i["code"] == "multi_choice_conflict_group" for i in body["issues"])

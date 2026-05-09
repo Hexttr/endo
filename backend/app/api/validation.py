@@ -7,6 +7,7 @@ to surface problems before they cause the bot to misbehave in production.
 The validator is read-only and side-effect free: it only reads from the DB.
 It is cheap enough to run on every page load of the Dashboard.
 """
+import re
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -104,6 +105,14 @@ async def validate_schema(schema_id: str, db: AsyncSession = Depends(get_db)) ->
     # --- 3. Per-node checks ------------------------------------------------
     for n in nodes:
         short = short_id(n.id)
+        node_options = opts_by_node.get(n.id, [])
+        node_edges = edges_by_node.get(n.id, [])
+        extra = n.extra or {}
+        explicit_unknown = any(o.option_id == "unknown" and o.next_node_id for o in node_options)
+        safe_default_targets = any(
+            o.option_id in ("no", "none", "unknown", "no_data") and o.next_node_id
+            for o in node_options
+        )
 
         # 3a. Section FK — after migration v4 the DB enforces this, but we
         # check anyway to be friendly when the integrity lag is a few ms.
@@ -135,7 +144,7 @@ async def validate_schema(schema_id: str, db: AsyncSession = Depends(get_db)) ->
             ))
 
         # 3d. Terminal with outgoing options (will be silently ignored).
-        if n.is_terminal and opts_by_node.get(n.id):
+        if n.is_terminal and node_options:
             issues.append(_issue(
                 "warning", "terminal_has_options",
                 f"Терминальный узел '{short}' имеет варианты ответов — они никогда не сработают.",
@@ -146,14 +155,66 @@ async def validate_schema(schema_id: str, db: AsyncSession = Depends(get_db)) ->
         # 3e. Non-terminal, non-info node with no way forward is a dead-end.
         if (not n.is_terminal
                 and n.input_type != "info"
-                and not opts_by_node.get(n.id)
-                and not edges_by_node.get(n.id)):
+                and not node_options
+                and not node_edges):
             issues.append(_issue(
                 "warning", "dead_end",
                 f"Узел '{short}' не терминальный, но не имеет вариантов/связей — диалог застрянет.",
                 entity_type="node", entity_id=short,
                 hint="Добавьте варианты ответов или отметьте узел терминальным.",
             ))
+
+        # 3f. Unknown-handling that can strand the conversation or silently pick
+        # a clinically unsafe fallback.
+        if n.unknown_action == "safe_default" and not safe_default_targets and not node_edges:
+            issues.append(_issue(
+                "warning", "unsafe_safe_default",
+                f"Узел '{short}' использует safe_default, но не имеет явного безопасного варианта "
+                "('нет' / 'не знаю') и не может продолжить диалог через edge.",
+                entity_type="node", entity_id=short,
+                hint="Добавьте вариант unknown/no_data/none или безопасное ребро продолжения.",
+            ))
+
+        if (
+            n.unknown_action == "skip_with_flag"
+            and n.input_type in {"single_choice", "yes_no"}
+            and not explicit_unknown
+            and not node_edges
+        ):
+            issues.append(_issue(
+                "warning", "skip_flag_without_route",
+                f"Узел '{short}' помечает пропуск флагом, но при 'нет данных' не имеет "
+                "явного маршрута продолжения.",
+                entity_type="node", entity_id=short,
+                hint="Добавьте кнопку 'Данные отсутствуют' с next или fallback-edge.",
+            ))
+
+        # 3g. Numeric steps without declared fields are opaque to clinicians.
+        if n.input_type == "numeric" and not extra.get("fields"):
+            issues.append(_issue(
+                "warning", "numeric_fields_missing",
+                f"Узел '{short}' собирает числовые данные, но не описывает поля ввода.",
+                entity_type="node", entity_id=short,
+                hint="Добавьте fields в JSON, чтобы UI показал отдельные показатели.",
+            ))
+
+        # 3h. Multi-choice groups with *_yes / *_no / *_unknown options on the
+        # same base id invite contradictory selections.
+        if n.input_type == "multi_choice":
+            grouped: dict[str, set[str]] = {}
+            for opt in node_options:
+                match = re.match(r"^(.*)_(yes|no|unknown)$", opt.option_id)
+                if match:
+                    grouped.setdefault(match.group(1), set()).add(match.group(2))
+            for base, suffixes in grouped.items():
+                if len(suffixes) >= 2:
+                    issues.append(_issue(
+                        "warning", "multi_choice_conflict_group",
+                        f"Узел '{short}' допускает противоречивый multi-select для группы '{base}'.",
+                        entity_type="node", entity_id=short,
+                        hint="Разделите вопрос на шаги или оставьте только положительные признаки.",
+                    ))
+                    break
 
     # --- 4. Option.next_node_id must resolve ------------------------------
     for o in options:

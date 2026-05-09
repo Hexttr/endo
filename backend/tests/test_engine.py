@@ -1,13 +1,14 @@
 """Tests for the decision engine — the heart of the bot.
 
-Covers the three shapes of root-node resolution (explicit, legacy N000
-fallback, unconfigured) plus the happy-path single_choice flow.
+Covers root-node resolution, standard answer flows, and safety around
+unknown/no-data handling so the bot does not silently route clinicians into
+the wrong branch.
 """
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.engine.decision_engine import DecisionEngine
-from app.models import Schema, Node, Option, Final
+from app.models import Schema, Node, Option, Final, Section, Edge
 
 
 @pytest.mark.asyncio
@@ -81,3 +82,50 @@ async def test_process_answer_leads_to_final(db: AsyncSession, seeded_schema: st
     res = await engine.process_answer(session, "N1", "no")
     assert res.get("final_id") == "F1"
     assert res.get("status") == "completed"
+
+
+@pytest.mark.asyncio
+async def test_multi_choice_empty_selection_is_not_unknown(db: AsyncSession):
+    sid = "multi-empty"
+    db.add(Schema(id=sid, name="Multi empty", root_node_id=f"{sid}::M1"))
+    db.add(Section(id=f"{sid}::overview", schema_id=sid, slug="overview", label="Overview", order=0))
+    db.add(Node(id=f"{sid}::M1", schema_id=sid, section="overview",
+                text="Risk factors", input_type="multi_choice", unknown_action="skip_with_flag"))
+    db.add(Node(id=f"{sid}::M2", schema_id=sid, section="overview",
+                text="Next", input_type="info", is_terminal=True))
+    await db.flush()
+    db.add(Edge(from_node_id=f"{sid}::M1", schema_id=sid, to_node_id=f"{sid}::M2", label="next"))
+    await db.commit()
+
+    engine = DecisionEngine(db, schema_id=sid)
+    session = await engine.start_session(user_id="u1")
+    res = await engine.process_answer(session, "M1", [])
+
+    assert res.get("next_node_id") == "M2"
+    assert session.unknown_flags == []
+    assert session.collected_data.get("M1") == []
+
+
+@pytest.mark.asyncio
+async def test_safe_default_unknown_without_safe_option_does_not_pick_last_option(db: AsyncSession):
+    sid = "safe-default"
+    db.add(Schema(id=sid, name="Safe default", root_node_id=f"{sid}::S1"))
+    db.add(Section(id=f"{sid}::overview", schema_id=sid, slug="overview", label="Overview", order=0))
+    db.add(Node(id=f"{sid}::S1", schema_id=sid, section="overview",
+                text="Severity?", input_type="single_choice", unknown_action="safe_default"))
+    db.add(Final(id=f"{sid}::F1", schema_id=sid, diagnosis="Moderate"))
+    db.add(Final(id=f"{sid}::F2", schema_id=sid, diagnosis="Severe"))
+    await db.flush()
+    db.add(Option(node_id=f"{sid}::S1", schema_id=sid, option_id="moderate",
+                  label="Moderate", next_node_id=f"{sid}::F1"))
+    db.add(Option(node_id=f"{sid}::S1", schema_id=sid, option_id="severe",
+                  label="Severe", next_node_id=f"{sid}::F2"))
+    await db.commit()
+
+    engine = DecisionEngine(db, schema_id=sid)
+    session = await engine.start_session(user_id="u1")
+    res = await engine.process_answer(session, "S1", "unknown")
+
+    assert res.get("next_node_id") is None
+    assert res.get("status") == "active"
+    assert session.unknown_flags == [{"node": "S1", "reason": "user_unknown"}]
