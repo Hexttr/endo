@@ -343,7 +343,6 @@
       "text": "ЭГДС выполнена. Основная находка?",
       "input_type": "single_choice",
       "unknown_action": "branch_c",
-      "allow_multiple": true,
       "options": [
         {"id": "gastric_ulcer", "label": "Язва желудка", "next": "A061"},
         {"id": "duodenal_ulcer", "label": "Язва ДПК", "next": "A062"},
@@ -455,7 +454,7 @@
       "section": "branch_a_egds",
       "text": "Множественные находки при ЭГДС. Выберите ВСЕ обнаруженные патологии.",
       "input_type": "multi_choice",
-      "priority_order": ["vrvp", "gastric_ulcer", "duodenal_ulcer", "burn", "multiple_erosions", "esophageal_erosions", "polyp_bleeding"],
+      "priority_order": ["vrvp", "gastric_ulcer", "duodenal_ulcer", "burn", "erosions", "ere", "polyp"],
       "options": [
         {"id": "vrvp", "label": "ВРВП", "priority": 1, "next": "A023"},
         {"id": "gastric_ulcer", "label": "Язва желудка", "priority": 2, "next": "A061"},
@@ -844,7 +843,6 @@
       "text": "Результат ЭГДС?",
       "input_type": "single_choice",
       "unknown_action": "branch_c",
-      "allow_multiple": true,
       "options": [
         {"id": "polyps", "label": "Полипы", "next": "B070"},
         {"id": "vrvp", "label": "ВРВП", "next": "B080"},
@@ -1636,6 +1634,7 @@
     {"from": "A022", "to": "A023", "label": "ЭГДС выполнена"},
     {"from": "A040", "to": "A050", "label": "Далее"},
     {"from": "A050", "to": "A060", "label": "ЭГДС"},
+    {"from": "MULTIPLE_A", "to": "PENDING_REEXAM", "label": "Если находки не отмечены"},
     {"from": "B010", "to": "B020", "label": "Далее"},
     {"from": "B030a", "to": "B031", "label": "Далее"},
     {"from": "B036", "to": "B040", "label": "→ Анамнез"},
@@ -1644,6 +1643,7 @@
     {"from": "B052_dcp", "to": "B052_family", "label": "Далее"},
     {"from": "B052_family", "to": "B060", "label": "→ Лаб. данные"},
     {"from": "B060", "to": "B065", "label": "Далее"},
+    {"from": "MULTIPLE_B", "to": "PENDING_DIFF", "label": "Если находки не отмечены"},
     {"from": "B071", "to": "B072", "label": "Далее"},
     {"from": "B074", "to": "B075", "label": "Далее"},
     {"from": "B076", "to": "B077", "label": "→ Автодифференциация"},

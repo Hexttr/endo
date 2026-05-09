@@ -459,7 +459,14 @@ class DecisionEngine:
                     portal_signs += 1
                 if "jaundice" in c010:
                     portal_signs += 1
-                if "cirrhosis_yes" in c015:
+                thrombocytopenia = False
+                if isinstance(c030, dict):
+                    plt = c030.get("plt")
+                    try:
+                        thrombocytopenia = plt is not None and float(plt) < 150
+                    except (ValueError, TypeError):
+                        thrombocytopenia = False
+                if thrombocytopenia:
                     portal_signs += 1
                 if portal_signs >= 2 or ("cirrhosis_yes" in c015 and ("ascites" in c010 or "jaundice" in c010)):
                     return self._fid(rule["next"])
